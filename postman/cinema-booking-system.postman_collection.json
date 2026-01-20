@@ -1,0 +1,1169 @@
+{
+  "info": {
+    "_postman_id": "cinema-booking-system-v1",
+    "name": "Cinema Booking System",
+    "description": "Collection completa para testar o sistema de reservas de cinema.\n\n## Fluxo de Teste\n1. Criar Usuário\n2. Criar Sessão de Cinema\n3. Verificar Assentos Disponíveis\n4. Criar Reserva (30s TTL)\n5. Confirmar Pagamento\n6. Verificar Histórico de Compras\n\n## Variáveis\n- `baseUrl`: URL base da API\n- `userId`: ID do usuário criado\n- `sessionId`: ID da sessão criada\n- `seatIds`: Array de IDs dos assentos\n- `reservationId`: ID da reserva criada",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sessionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "seatId1",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "seatId2",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "reservationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "idempotencyKey",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Users",
+      "item": [
+        {
+          "name": "1.1 Criar Usuário",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "",
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has user id', function () {",
+                  "    pm.expect(response.id).to.exist;",
+                  "});",
+                  "",
+                  "// Salvar userId para usar nas próximas requisições",
+                  "if (response.id) {",
+                  "    pm.collectionVariables.set('userId', response.id);",
+                  "    console.log('userId salvo:', response.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Gerar email único para evitar conflitos",
+                  "const timestamp = Date.now();",
+                  "pm.variables.set('uniqueEmail', `usuario.teste.${timestamp}@example.com`);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Usuario Teste\",\n    \"email\": \"{{uniqueEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"]
+            },
+            "description": "Cria um novo usuário no sistema. O email deve ser único."
+          },
+          "response": []
+        },
+        {
+          "name": "1.2 Buscar Usuário por ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has correct user', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.id).to.equal(pm.collectionVariables.get('userId'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            },
+            "description": "Busca detalhes de um usuário pelo ID."
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints relacionados a usuários"
+    },
+    {
+      "name": "2. Sessions",
+      "item": [
+        {
+          "name": "2.1 Criar Sessão de Cinema",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "",
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has session id', function () {",
+                  "    pm.expect(response.id).to.exist;",
+                  "});",
+                  "",
+                  "pm.test('Session has correct movie title', function () {",
+                  "    pm.expect(response.movieTitle).to.equal('Matrix Resurrections');",
+                  "});",
+                  "",
+                  "// Salvar sessionId",
+                  "if (response.id) {",
+                  "    pm.collectionVariables.set('sessionId', response.id);",
+                  "    console.log('sessionId salvo:', response.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"movieTitle\": \"Matrix Resurrections\",\n    \"room\": \"Sala IMAX 1\",\n    \"startTime\": \"2026-01-25T19:00:00Z\",\n    \"ticketPrice\": 35.00,\n    \"totalSeats\": 20\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/sessions",
+              "host": ["{{baseUrl}}"],
+              "path": ["sessions"]
+            },
+            "description": "Cria uma nova sessão de cinema com os assentos especificados."
+          },
+          "response": []
+        },
+        {
+          "name": "2.2 Listar Todas as Sessões",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is an array', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/sessions",
+              "host": ["{{baseUrl}}"],
+              "path": ["sessions"]
+            },
+            "description": "Lista todas as sessões de cinema disponíveis."
+          },
+          "response": []
+        },
+        {
+          "name": "2.3 Buscar Sessão por ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has session details', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.id).to.exist;",
+                  "    pm.expect(response.movieTitle).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/sessions/{{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["sessions", "{{sessionId}}"]
+            },
+            "description": "Busca detalhes de uma sessão específica."
+          },
+          "response": []
+        },
+        {
+          "name": "2.4 Verificar Assentos Disponíveis",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "",
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has seats array', function () {",
+                  "    pm.expect(response.seats).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Has available seats', function () {",
+                  "    const availableSeats = response.seats.filter(s => s.status === 'AVAILABLE');",
+                  "    pm.expect(availableSeats.length).to.be.greaterThan(0);",
+                  "});",
+                  "",
+                  "// Salvar IDs de 2 assentos disponíveis para reserva",
+                  "const availableSeats = response.seats.filter(s => s.status === 'AVAILABLE');",
+                  "if (availableSeats.length >= 2) {",
+                  "    pm.collectionVariables.set('seatId1', availableSeats[0].id);",
+                  "    pm.collectionVariables.set('seatId2', availableSeats[1].id);",
+                  "    console.log('Assentos salvos:', availableSeats[0].id, availableSeats[1].id);",
+                  "} else if (availableSeats.length === 1) {",
+                  "    pm.collectionVariables.set('seatId1', availableSeats[0].id);",
+                  "    console.log('Apenas 1 assento disponível:', availableSeats[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/sessions/{{sessionId}}/seats",
+              "host": ["{{baseUrl}}"],
+              "path": ["sessions", "{{sessionId}}", "seats"]
+            },
+            "description": "Retorna a disponibilidade de assentos em tempo real.\n\nStatus possíveis:\n- AVAILABLE: Disponível para reserva\n- RESERVED: Reservado temporariamente (30s)\n- SOLD: Vendido definitivamente"
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints relacionados a sessões de cinema"
+    },
+    {
+      "name": "3. Reservations",
+      "item": [
+        {
+          "name": "3.1 Criar Reserva (2 assentos)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Gerar chave de idempotência única",
+                  "const idempotencyKey = 'reservation-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);",
+                  "pm.collectionVariables.set('idempotencyKey', idempotencyKey);",
+                  "console.log('Idempotency Key:', idempotencyKey);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "",
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Reservation has PENDING status', function () {",
+                  "    pm.expect(response.status).to.equal('PENDING');",
+                  "});",
+                  "",
+                  "pm.test('Reservation has expiration time', function () {",
+                  "    pm.expect(response.expiresAt).to.exist;",
+                  "});",
+                  "",
+                  "pm.test('Reservation expires in ~30 seconds', function () {",
+                  "    const expiresAt = new Date(response.expiresAt);",
+                  "    const now = new Date();",
+                  "    const diffSeconds = (expiresAt - now) / 1000;",
+                  "    pm.expect(diffSeconds).to.be.within(25, 35);",
+                  "});",
+                  "",
+                  "// Salvar reservationId",
+                  "if (response.id) {",
+                  "    pm.collectionVariables.set('reservationId', response.id);",
+                  "    console.log('reservationId salvo:', response.id);",
+                  "    console.log('Expira em:', response.expiresAt);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Chave única para garantir idempotência"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": \"{{userId}}\",\n    \"sessionId\": \"{{sessionId}}\",\n    \"seatIds\": [\"{{seatId1}}\", \"{{seatId2}}\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/reservations",
+              "host": ["{{baseUrl}}"],
+              "path": ["reservations"]
+            },
+            "description": "Cria uma reserva temporária (30 segundos TTL).\n\n⚠️ **IMPORTANTE**: A reserva expira automaticamente após 30 segundos se não for confirmada!\n\nO header `Idempotency-Key` garante que requisições repetidas retornem a mesma reserva."
+          },
+          "response": []
+        },
+        {
+          "name": "3.2 Testar Idempotência (mesma key)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "",
+                  "pm.test('Status code is 201 (returns existing)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Returns same reservation (idempotent)', function () {",
+                  "    pm.expect(response.id).to.equal(pm.collectionVariables.get('reservationId'));",
+                  "});",
+                  "",
+                  "console.log('Idempotência funcionou! Mesma reserva retornada:', response.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Mesma chave da requisição anterior"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": \"{{userId}}\",\n    \"sessionId\": \"{{sessionId}}\",\n    \"seatIds\": [\"{{seatId1}}\", \"{{seatId2}}\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/reservations",
+              "host": ["{{baseUrl}}"],
+              "path": ["reservations"]
+            },
+            "description": "Testa se a idempotência funciona corretamente.\n\nUsando a mesma `Idempotency-Key`, deve retornar a reserva já existente ao invés de criar uma nova."
+          },
+          "response": []
+        },
+        {
+          "name": "3.3 Buscar Reserva por ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has reservation details', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.id).to.exist;",
+                  "    pm.expect(response.status).to.exist;",
+                  "    pm.expect(response.seats).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reservations/{{reservationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["reservations", "{{reservationId}}"]
+            },
+            "description": "Busca detalhes de uma reserva específica."
+          },
+          "response": []
+        },
+        {
+          "name": "3.4 Verificar Assentos Reservados",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "",
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Reserved seats have RESERVED status', function () {",
+                  "    const seatId1 = pm.collectionVariables.get('seatId1');",
+                  "    const seatId2 = pm.collectionVariables.get('seatId2');",
+                  "    ",
+                  "    const seat1 = response.seats.find(s => s.id === seatId1);",
+                  "    const seat2 = response.seats.find(s => s.id === seatId2);",
+                  "    ",
+                  "    if (seat1) pm.expect(seat1.status).to.equal('RESERVED');",
+                  "    if (seat2) pm.expect(seat2.status).to.equal('RESERVED');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/sessions/{{sessionId}}/seats",
+              "host": ["{{baseUrl}}"],
+              "path": ["sessions", "{{sessionId}}", "seats"]
+            },
+            "description": "Verifica se os assentos foram marcados como RESERVED após a reserva."
+          },
+          "response": []
+        },
+        {
+          "name": "3.5 Tentar Reservar Assento Já Reservado (deve falhar)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Nova chave de idempotência",
+                  "const newKey = 'conflict-test-' + Date.now();",
+                  "pm.variables.set('newIdempotencyKey', newKey);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 409 Conflict', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "",
+                  "pm.test('Error message indicates conflict', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.message).to.include('already reserved');",
+                  "});",
+                  "",
+                  "console.log('Conflito detectado corretamente!');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{newIdempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": \"{{userId}}\",\n    \"sessionId\": \"{{sessionId}}\",\n    \"seatIds\": [\"{{seatId1}}\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/reservations",
+              "host": ["{{baseUrl}}"],
+              "path": ["reservations"]
+            },
+            "description": "Tenta reservar um assento que já está reservado.\n\n**Esperado**: HTTP 409 Conflict"
+          },
+          "response": []
+        },
+        {
+          "name": "3.6 Cancelar Reserva",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Reservation status is CANCELLED', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.status).to.equal('CANCELLED');",
+                  "});",
+                  "",
+                  "console.log('Reserva cancelada com sucesso!');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reservations/{{reservationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["reservations", "{{reservationId}}"]
+            },
+            "description": "Cancela uma reserva e libera os assentos."
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints relacionados a reservas temporárias"
+    },
+    {
+      "name": "4. Payments",
+      "item": [
+        {
+          "name": "4.0 Criar Nova Reserva para Pagamento",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const idempotencyKey = 'payment-reservation-' + Date.now();",
+                  "pm.collectionVariables.set('idempotencyKey', idempotencyKey);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "",
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "if (response.id) {",
+                  "    pm.collectionVariables.set('reservationId', response.id);",
+                  "    console.log('Nova reserva para pagamento:', response.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": \"{{userId}}\",\n    \"sessionId\": \"{{sessionId}}\",\n    \"seatIds\": [\"{{seatId1}}\", \"{{seatId2}}\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/reservations",
+              "host": ["{{baseUrl}}"],
+              "path": ["reservations"]
+            },
+            "description": "Cria uma nova reserva para testar o fluxo de pagamento.\n\n⚡ **Execute rapidamente o próximo passo** - a reserva expira em 30 segundos!"
+          },
+          "response": []
+        },
+        {
+          "name": "4.1 Confirmar Pagamento",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "",
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Payment creates a sale', function () {",
+                  "    pm.expect(response.id).to.exist;",
+                  "    pm.expect(response.status).to.equal('CONFIRMED');",
+                  "});",
+                  "",
+                  "pm.test('Sale has total amount', function () {",
+                  "    pm.expect(response.totalAmount).to.be.a('string');",
+                  "});",
+                  "",
+                  "console.log('Pagamento confirmado! Venda ID:', response.id);",
+                  "console.log('Valor total:', response.totalAmount);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"reservationId\": \"{{reservationId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments/confirm",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "confirm"]
+            },
+            "description": "Confirma o pagamento de uma reserva.\n\n⚠️ **IMPORTANTE**: Deve ser executado dentro de 30 segundos após criar a reserva!\n\nAo confirmar:\n1. Reserva muda de PENDING para CONFIRMED\n2. Assentos mudam de RESERVED para SOLD\n3. Uma Sale é criada com os detalhes da compra"
+          },
+          "response": []
+        },
+        {
+          "name": "4.2 Verificar Assentos Vendidos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "",
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Sold seats have SOLD status', function () {",
+                  "    const seatId1 = pm.collectionVariables.get('seatId1');",
+                  "    const seatId2 = pm.collectionVariables.get('seatId2');",
+                  "    ",
+                  "    const seat1 = response.seats.find(s => s.id === seatId1);",
+                  "    const seat2 = response.seats.find(s => s.id === seatId2);",
+                  "    ",
+                  "    if (seat1) pm.expect(seat1.status).to.equal('SOLD');",
+                  "    if (seat2) pm.expect(seat2.status).to.equal('SOLD');",
+                  "});",
+                  "",
+                  "console.log('Assentos marcados como SOLD!');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/sessions/{{sessionId}}/seats",
+              "host": ["{{baseUrl}}"],
+              "path": ["sessions", "{{sessionId}}", "seats"]
+            },
+            "description": "Verifica se os assentos foram marcados como SOLD após o pagamento."
+          },
+          "response": []
+        },
+        {
+          "name": "4.3 Histórico de Compras do Usuário",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "",
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is an array', function () {",
+                  "    pm.expect(response).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Has at least one purchase', function () {",
+                  "    pm.expect(response.length).to.be.greaterThan(0);",
+                  "});",
+                  "",
+                  "pm.test('Purchase has movie and seats info', function () {",
+                  "    const purchase = response[0];",
+                  "    pm.expect(purchase.movieTitle).to.exist;",
+                  "    pm.expect(purchase.seats).to.be.an('array');",
+                  "});",
+                  "",
+                  "console.log('Compras encontradas:', response.length);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}/purchases",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}", "purchases"]
+            },
+            "description": "Retorna o histórico de compras de um usuário."
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints relacionados a pagamentos"
+    },
+    {
+      "name": "5. Testes de Expiração",
+      "item": [
+        {
+          "name": "5.1 Criar Reserva para Expirar",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const idempotencyKey = 'expiration-test-' + Date.now();",
+                  "pm.collectionVariables.set('idempotencyKey', idempotencyKey);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "",
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "if (response.id) {",
+                  "    pm.collectionVariables.set('reservationId', response.id);",
+                  "    console.log('Reserva criada:', response.id);",
+                  "    console.log('Expira em:', response.expiresAt);",
+                  "    console.log('\\n⏰ AGUARDE 35 segundos e execute o próximo request para verificar a expiração!');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": \"{{userId}}\",\n    \"sessionId\": \"{{sessionId}}\",\n    \"seatIds\": [\"{{seatId1}}\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/reservations",
+              "host": ["{{baseUrl}}"],
+              "path": ["reservations"]
+            },
+            "description": "Cria uma reserva e deixa expirar.\n\n⏰ **AGUARDE 35 SEGUNDOS** antes de executar o próximo request!"
+          },
+          "response": []
+        },
+        {
+          "name": "5.2 Verificar Reserva Expirada (após 35s)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "",
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Reservation is EXPIRED', function () {",
+                  "    pm.expect(response.status).to.equal('EXPIRED');",
+                  "});",
+                  "",
+                  "console.log('Reserva expirada corretamente! Status:', response.status);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reservations/{{reservationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["reservations", "{{reservationId}}"]
+            },
+            "description": "Verifica se a reserva foi automaticamente expirada.\n\n**Execute apenas após 35 segundos da criação da reserva!**"
+          },
+          "response": []
+        },
+        {
+          "name": "5.3 Verificar Assentos Liberados",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "",
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Seat is available again', function () {",
+                  "    const seatId1 = pm.collectionVariables.get('seatId1');",
+                  "    const seat = response.seats.find(s => s.id === seatId1);",
+                  "    ",
+                  "    if (seat) {",
+                  "        pm.expect(seat.status).to.equal('AVAILABLE');",
+                  "        console.log('Assento liberado corretamente!');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/sessions/{{sessionId}}/seats",
+              "host": ["{{baseUrl}}"],
+              "path": ["sessions", "{{sessionId}}", "seats"]
+            },
+            "description": "Verifica se os assentos foram liberados após a expiração."
+          },
+          "response": []
+        }
+      ],
+      "description": "Testes para verificar a expiração automática de reservas após 30 segundos"
+    },
+    {
+      "name": "6. Testes de Rate Limiting",
+      "item": [
+        {
+          "name": "6.1 Verificar Headers de Rate Limit",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Has X-RateLimit-Limit header', function () {",
+                  "    pm.expect(pm.response.headers.get('X-RateLimit-Limit')).to.exist;",
+                  "});",
+                  "",
+                  "pm.test('Has X-RateLimit-Remaining header', function () {",
+                  "    pm.expect(pm.response.headers.get('X-RateLimit-Remaining')).to.exist;",
+                  "});",
+                  "",
+                  "pm.test('Has X-RateLimit-Reset header', function () {",
+                  "    pm.expect(pm.response.headers.get('X-RateLimit-Reset')).to.exist;",
+                  "});",
+                  "",
+                  "console.log('Rate Limit:', pm.response.headers.get('X-RateLimit-Limit'));",
+                  "console.log('Remaining:', pm.response.headers.get('X-RateLimit-Remaining'));",
+                  "console.log('Reset:', pm.response.headers.get('X-RateLimit-Reset'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/sessions",
+              "host": ["{{baseUrl}}"],
+              "path": ["sessions"]
+            },
+            "description": "Verifica se os headers de rate limiting estão presentes."
+          },
+          "response": []
+        }
+      ],
+      "description": "Testes para verificar o rate limiting"
+    },
+    {
+      "name": "7. Cenários de Erro",
+      "item": [
+        {
+          "name": "7.1 Usuário não encontrado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/00000000-0000-0000-0000-000000000000",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "00000000-0000-0000-0000-000000000000"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7.2 Sessão não encontrada",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/sessions/00000000-0000-0000-0000-000000000000",
+              "host": ["{{baseUrl}}"],
+              "path": ["sessions", "00000000-0000-0000-0000-000000000000"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7.3 Reserva não encontrada",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reservations/00000000-0000-0000-0000-000000000000",
+              "host": ["{{baseUrl}}"],
+              "path": ["reservations", "00000000-0000-0000-0000-000000000000"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7.4 Pagamento de reserva expirada",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400 or 404', function () {",
+                  "    pm.expect([400, 404]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"reservationId\": \"00000000-0000-0000-0000-000000000000\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments/confirm",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "confirm"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7.5 Validação - seatIds vazio",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('tempKey', 'validation-test-' + Date.now());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{tempKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": \"{{userId}}\",\n    \"sessionId\": \"{{sessionId}}\",\n    \"seatIds\": []\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/reservations",
+              "host": ["{{baseUrl}}"],
+              "path": ["reservations"]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Testes de cenários de erro"
+    }
+  ]
+}
