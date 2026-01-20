@@ -16,6 +16,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { UsersModule } from './modules/users/users.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { MessagingModule } from './modules/messaging/messaging.module';
     RedisModule,
     MessagingModule,
 
+    HealthModule,
     UsersModule,
     SessionsModule,
     ReservationsModule,
