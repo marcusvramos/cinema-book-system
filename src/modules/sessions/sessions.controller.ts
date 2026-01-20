@@ -4,6 +4,7 @@ import { SessionsService } from './sessions.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { SeatAvailabilityResponseDto } from './dto/seat-availability-response.dto';
 import { SessionResponseDto } from './dto/session-response.dto';
+import { Session } from './entities/session.entity';
 
 @ApiTags('sessions')
 @Controller('sessions')
@@ -23,19 +24,7 @@ export class SessionsController {
   })
   async create(@Body() createSessionDto: CreateSessionDto): Promise<SessionResponseDto> {
     const session = await this.sessionsService.create(createSessionDto);
-    return {
-      id: session.id,
-      movieTitle: session.movieTitle,
-      room: session.room,
-      startTime: session.startTime,
-      ticketPrice: Number(session.ticketPrice),
-      createdAt: session.createdAt,
-      seats: session.seats?.map((seat) => ({
-        id: seat.id,
-        seatLabel: seat.seatLabel,
-        status: seat.status,
-      })),
-    };
+    return this.toResponseDto(session);
   }
 
   @Get()
@@ -47,14 +36,7 @@ export class SessionsController {
   })
   async findAll(): Promise<SessionResponseDto[]> {
     const sessions = await this.sessionsService.findAll();
-    return sessions.map((session) => ({
-      id: session.id,
-      movieTitle: session.movieTitle,
-      room: session.room,
-      startTime: session.startTime,
-      ticketPrice: Number(session.ticketPrice),
-      createdAt: session.createdAt,
-    }));
+    return sessions.map((session) => this.toResponseDto(session));
   }
 
   @Get(':id')
@@ -67,19 +49,7 @@ export class SessionsController {
   @ApiResponse({ status: 404, description: 'Session not found' })
   async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<SessionResponseDto> {
     const session = await this.sessionsService.findById(id);
-    return {
-      id: session.id,
-      movieTitle: session.movieTitle,
-      room: session.room,
-      startTime: session.startTime,
-      ticketPrice: Number(session.ticketPrice),
-      createdAt: session.createdAt,
-      seats: session.seats?.map((seat) => ({
-        id: seat.id,
-        seatLabel: seat.seatLabel,
-        status: seat.status,
-      })),
-    };
+    return this.toResponseDto(session);
   }
 
   @Get(':id/seats')
@@ -94,5 +64,21 @@ export class SessionsController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<SeatAvailabilityResponseDto> {
     return this.sessionsService.getAvailability(id);
+  }
+
+  private toResponseDto(session: Session): SessionResponseDto {
+    return {
+      id: session.id,
+      movieTitle: session.movieTitle,
+      room: session.room,
+      startTime: session.startTime,
+      ticketPrice: Number(session.ticketPrice),
+      createdAt: session.createdAt,
+      seats: session.seats?.map((seat) => ({
+        id: seat.id,
+        seatLabel: seat.seatLabel,
+        status: seat.status,
+      })),
+    };
   }
 }
