@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, In, EntityManager } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Reservation, ReservationStatus } from './entities/reservation.entity';
 import { Seat, SeatStatus } from '@modules/sessions/entities/seat.entity';
@@ -14,7 +14,6 @@ import { Session } from '@modules/sessions/entities/session.entity';
 import { RedisLockService } from '@infrastructure/redis/redis-lock.service';
 import { EventPublisher } from '@modules/messaging/publishers/event.publisher';
 import { CreateReservationDto } from './dto/create-reservation.dto';
-import { executeInTransaction } from '@infrastructure/database/transaction.util';
 import { isUniqueViolation } from '@common/utils/error.util';
 import { getUnavailableSeatLabels } from '@common/utils/seat.util';
 import { EXPIRATION_BATCH_LIMIT } from '@modules/messaging/messaging.constants';
@@ -155,13 +154,55 @@ export class ReservationsService {
   }
 
   async cancel(id: string): Promise<Reservation> {
-    const reservation = await this.findById(id);
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    if (reservation.status !== ReservationStatus.PENDING) {
-      throw new BadRequestException('Only pending reservations can be cancelled');
+    try {
+      const reservation = await queryRunner.manager.findOne(Reservation, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!reservation) {
+        throw new NotFoundException(`Reservation with ID ${id} not found`);
+      }
+
+      if (reservation.status !== ReservationStatus.PENDING) {
+        throw new BadRequestException('Only pending reservations can be cancelled');
+      }
+
+      const reservationWithSeats = await queryRunner.manager.findOne(Reservation, {
+        where: { id },
+        relations: ['seats'],
+      });
+
+      const seatIds = reservationWithSeats?.seats?.map((s) => s.id) || [];
+
+      reservation.status = ReservationStatus.CANCELLED;
+      await queryRunner.manager.save(reservation);
+
+      if (seatIds.length > 0) {
+        await queryRunner.manager.update(
+          Seat,
+          { id: In(seatIds) },
+          { status: SeatStatus.AVAILABLE },
+        );
+      }
+
+      await queryRunner.commitTransaction();
+
+      this.logger.log(`Reservation cancelled: ${reservation.id}`);
+      await this.eventPublisher.publishSeatReleased(reservation.sessionId, seatIds);
+
+      reservation.seats = reservationWithSeats?.seats || [];
+      return reservation;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
-
-    return this.releaseReservation(reservation, ReservationStatus.CANCELLED);
   }
 
   async expirePendingReservations(limit = EXPIRATION_BATCH_LIMIT): Promise<number> {
@@ -232,26 +273,5 @@ export class ReservationsService {
     } finally {
       await queryRunner.release();
     }
-  }
-
-  private async releaseReservation(
-    reservation: Reservation,
-    status: ReservationStatus,
-  ): Promise<Reservation> {
-    const seatIds = reservation.seats.map((s) => s.id);
-
-    await executeInTransaction(this.dataSource, async (manager: EntityManager) => {
-      reservation.status = status;
-      await manager.save(reservation);
-
-      if (seatIds.length > 0) {
-        await manager.update(Seat, { id: In(seatIds) }, { status: SeatStatus.AVAILABLE });
-      }
-    });
-
-    this.logger.log(`Reservation ${status.toLowerCase()}: ${reservation.id}`);
-    await this.eventPublisher.publishSeatReleased(reservation.sessionId, seatIds);
-
-    return reservation;
   }
 }

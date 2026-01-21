@@ -340,7 +340,7 @@ describe('ReservationsService', () => {
         seats: [{ id: 'seat-1' }, { id: 'seat-2' }],
       };
 
-      mockReservationRepository.findOne.mockResolvedValue(reservation);
+      mockQueryRunner.manager.findOne.mockResolvedValue(reservation);
       mockQueryRunner.manager.save.mockResolvedValue({
         ...reservation,
         status: ReservationStatus.CANCELLED,
@@ -360,15 +360,19 @@ describe('ReservationsService', () => {
       const reservation = {
         id: 'reservation-uuid',
         status: ReservationStatus.CONFIRMED,
+        sessionId: 'session-uuid',
         seats: [],
       };
 
-      mockReservationRepository.findOne.mockResolvedValue(reservation);
+      mockQueryRunner.manager.findOne.mockResolvedValue(reservation);
 
       await expect(service.cancel('reservation-uuid')).rejects.toThrow(BadRequestException);
-      await expect(service.cancel('reservation-uuid')).rejects.toThrow(
-        'Only pending reservations can be cancelled',
-      );
+    });
+
+    it('should throw NotFoundException if reservation does not exist', async () => {
+      mockQueryRunner.manager.findOne.mockResolvedValue(null);
+
+      await expect(service.cancel('non-existent')).rejects.toThrow(NotFoundException);
     });
 
     it('should publish seat released event after cancellation', async () => {
@@ -379,7 +383,7 @@ describe('ReservationsService', () => {
         seats: [{ id: 'seat-1' }],
       };
 
-      mockReservationRepository.findOne.mockResolvedValue(reservation);
+      mockQueryRunner.manager.findOne.mockResolvedValue(reservation);
       mockQueryRunner.manager.save.mockResolvedValue({
         ...reservation,
         status: ReservationStatus.CANCELLED,

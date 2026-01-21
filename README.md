@@ -119,7 +119,7 @@ Não é necessário! Os scripts de teste criam seus próprios dados automaticame
 ### Como executar testes
 
 ```bash
-# Testes unitários (180 testes, 17 suites)
+# Testes unitários (181 testes, 17 suites)
 pnpm test
 
 # Testes com cobertura (~86% coverage)
