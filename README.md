@@ -196,33 +196,17 @@ make help  # Lista todos os comandos
 
 **Problema**: 10 usuários clicam no último assento no mesmo milissegundo.
 
-**Solução**: Dupla camada de proteção:
+**Solução**: Implementei uma estratégia de **dupla camada de proteção** combinando Redis e PostgreSQL:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Requisição chega                       │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│  1. Redis Distributed Lock (SET NX PX 5000)                 │
-│     - Apenas UMA requisição passa por vez                   │
-│     - Outras recebem 409 Conflict imediatamente             │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│  2. PostgreSQL Transaction + SELECT FOR UPDATE              │
-│     - Lock pessimista nos assentos                          │
-│     - Garante ACID mesmo se Redis falhar                    │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│  3. Verificação de status (AVAILABLE?)                      │
-│     - Se não disponível → rollback + 409 Conflict           │
-└─────────────────────────────────────────────────────────────┘
-```
+1. **Camada 1 - Redis Distributed Lock**: Quando uma requisição chega, o sistema tenta adquirir um lock distribuído no Redis usando `SET NX PX` (set if not exists, with expiration). O lock é criado com uma chave única baseada na sessão e nos assentos solicitados. Se outra requisição tentar reservar os mesmos assentos enquanto o lock existe, ela recebe imediatamente um erro `409 Conflict`. O TTL de 5 segundos garante que o lock seja liberado mesmo se a aplicação falhar.
+
+2. **Camada 2 - PostgreSQL Pessimistic Lock**: Mesmo com o Redis protegendo, uso `SELECT FOR UPDATE` dentro de uma transação `SERIALIZABLE` no PostgreSQL. Isso cria um lock pessimista diretamente nas linhas dos assentos no banco de dados, garantindo consistência ACID mesmo em cenários onde o Redis possa falhar.
+
+3. **Verificação Final**: Após adquirir ambos os locks, o sistema verifica se os assentos ainda estão com status `AVAILABLE`. Se algum assento já foi reservado por outra transação, a operação é revertida com rollback.
+
+Esta abordagem garante que mesmo com milhares de requisições simultâneas, apenas UMA conseguirá reservar cada assento.
+
+[![](https://mermaid.ink/img/pako:eNrNlctymzAUhl_ljNaOx1xsLjNpBwNOnJBLgWZRYKGCDIwBpRL0Esy7V8aTtqsubbTRbY70zf8f6fQopRlBJtpV9EdaYNZC6MCkWtyceivyybeu5GWKKaQFyXECV1cfYN37JCs5eDTdDxejWx9ZDkcG2OGqoN0B7EhdGGDTZleVaZtcUrt_6HAmRGRlRg_gRM-UtzkjwScPQoYbjtO2pE1yZjpn9NGNAtdz7RA2Tz58fnas0E2mkHfuSLfpgxa3HYdrsF6srWetPffjcHm6zejsIxZ23kQ-raqvON0nU3mzN6N2NkzzRzlpF5T1AW6jU8YBJ7jlELgh8He_fTdw_RfXSc5Ldztqt422j-L6EBjhhH3H53yf_6PbjnR3kf308LANk4k5ezfS3YuKURHMCfytEFPQ7n6k8yJ5IYHNRMKRLEEzlItfGZkt68gM1YTV-DhF_TEqRm1BahIjUwwzzPYxiptBxLzi5gul9XsYo11eIFNUIC5m3WsmznZKnDNc_1llpMkIs2nXtMiUloo8noLMHv1EpiHNJUVdGYph6LKxUvUZ-oVMdTVXJM2QFEPRxJa-HGbobbxWmuuGJGtLXZc1eWGomjL8BmGud_I?type=png)](https://mermaid.live/edit#pako:eNrNlctymzAUhl_ljNaOx1xsLjNpBwNOnJBLgWZRYKGCDIwBpRL0Esy7V8aTtqsubbTRbY70zf8f6fQopRlBJtpV9EdaYNZC6MCkWtyceivyybeu5GWKKaQFyXECV1cfYN37JCs5eDTdDxejWx9ZDkcG2OGqoN0B7EhdGGDTZleVaZtcUrt_6HAmRGRlRg_gRM-UtzkjwScPQoYbjtO2pE1yZjpn9NGNAtdz7RA2Tz58fnas0E2mkHfuSLfpgxa3HYdrsF6srWetPffjcHm6zejsIxZ23kQ-raqvON0nU3mzN6N2NkzzRzlpF5T1AW6jU8YBJ7jlELgh8He_fTdw_RfXSc5Ldztqt422j-L6EBjhhH3H53yf_6PbjnR3kf308LANk4k5ezfS3YuKURHMCfytEFPQ7n6k8yJ5IYHNRMKRLEEzlItfGZkt68gM1YTV-DhF_TEqRm1BahIjUwwzzPYxiptBxLzi5gul9XsYo11eIFNUIC5m3WsmznZKnDNc_1llpMkIs2nXtMiUloo8noLMHv1EpiHNJUVdGYph6LKxUvUZ-oVMdTVXJM2QFEPRxJa-HGbobbxWmuuGJGtLXZc1eWGomjL8BmGud_I)
 
 **Código do lock Redis**:
 
@@ -464,6 +448,28 @@ Retry-After: 60 (quando bloqueado)
 - [ ] **WebSockets** para atualização em tempo real dos assentos
 - [ ] **Cache de sessions** no Redis para leituras frequentes
 - [ ] **Integração com gateway de pagamento** real
+
+---
+
+## Estrutura do Banco de Dados
+
+[![](https://mermaid.ink/img/pako:eNrtmsFu4jAQhl8lmjMgKCSBXFvthcteellFsmaTKVjEduQ4qCzw7utAWWBL1cNWy4ASIcAoDp88mv8fT7KGzOQECZB9kjizqAJuR6r3n3VFtgrWTOl2hLXMA__6PuVIt0SbzdEGGhXxpSOFsgiep7zonFRUOVRlkFlCR7lAx4NuG3A8TteOL11FVSWNZiYqt6coyiwlCSddQQzprDGK39odFcW_WyeaMR-6nDKpsPCU2YKcKK3MiOPatWp8T2qMrq3v_pHuzdKE__ptyonuoMZNlEWBP6ngREe6Vo0Qu7piGFmpXbD0mx8fWIZ0rRrfoxpb8tvtJTpe9fGNqXHTsuAhxTflFbzV-Kh39FpKnyds9O7UZ2VOqjSOdLYSC1pdsaNycV9hHBYClam14xhZbk52TleXeeuz9-ezgs8O6J1XnGJe3XMvOJnfVHApBdqs-IJeABbU9gK-NmefeeVsWxvfdQVV4kqRdiIz-kVadbVqpe1U3LtX7J8L2Gy6XbM-b1skQQpzrFLgw7c3tuuC_e21h7ugB8RdFdog-tx1KPWVOD_i4xLiD9ePSYgvdvLer6E4xruQevH_iM_v-zAC-3T9Nicx9jmyJOs5nUkBOjCzMofE2Zo6oMgqbIawbi6WgpuTohSaeTnaRQqp3vo5JeofxqjDNGvq2RySFywqP9pv9t8ezvrzqyWdk31s3B-SYRTvLgLJGl4hGUzC3qAfj4dRNO6Hg3AYdWAFSXcU9qLxQ_8h6vszRuM43Hbg1-5_-73JaBJHUTQMx5NRHIej7W-pa_0P?type=png)](https://mermaid.live/edit#pako:eNrtmsFu4jAQhl8lmjMgKCSBXFvthcteellFsmaTKVjEduQ4qCzw7utAWWBL1cNWy4ASIcAoDp88mv8fT7KGzOQECZB9kjizqAJuR6r3n3VFtgrWTOl2hLXMA__6PuVIt0SbzdEGGhXxpSOFsgiep7zonFRUOVRlkFlCR7lAx4NuG3A8TteOL11FVSWNZiYqt6coyiwlCSddQQzprDGK39odFcW_WyeaMR-6nDKpsPCU2YKcKK3MiOPatWp8T2qMrq3v_pHuzdKE__ptyonuoMZNlEWBP6ngREe6Vo0Qu7piGFmpXbD0mx8fWIZ0rRrfoxpb8tvtJTpe9fGNqXHTsuAhxTflFbzV-Kh39FpKnyds9O7UZ2VOqjSOdLYSC1pdsaNycV9hHBYClam14xhZbk52TleXeeuz9-ezgs8O6J1XnGJe3XMvOJnfVHApBdqs-IJeABbU9gK-NmefeeVsWxvfdQVV4kqRdiIz-kVadbVqpe1U3LtX7J8L2Gy6XbM-b1skQQpzrFLgw7c3tuuC_e21h7ugB8RdFdog-tx1KPWVOD_i4xLiD9ePSYgvdvLer6E4xruQevH_iM_v-zAC-3T9Nicx9jmyJOs5nUkBOjCzMofE2Zo6oMgqbIawbi6WgpuTohSaeTnaRQqp3vo5JeofxqjDNGvq2RySFywqP9pv9t8ezvrzqyWdk31s3B-SYRTvLgLJGl4hGUzC3qAfj4dRNO6Hg3AYdWAFSXcU9qLxQ_8h6vszRuM43Hbg1-5_-73JaBJHUTQMx5NRHIej7W-pa_0P)
+
+### Enums
+
+| Campo | Valores |
+|-------|---------|
+| `seats.status` | `AVAILABLE` → `RESERVED` → `SOLD` |
+| `reservations.status` | `PENDING` → `CONFIRMED` / `EXPIRED` / `CANCELLED` |
+
+### Constraints
+
+| Tabela | Constraint | Colunas |
+|--------|------------|---------|
+| sessions | UNIQUE | `(room, start_time)` |
+| seats | UNIQUE | `(session_id, seat_label)` |
+| reservations | UNIQUE | `idempotency_key` |
+| sales | UNIQUE | `reservation_id` |
 
 ---
 
