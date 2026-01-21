@@ -1,5 +1,13 @@
 # Changelog
 
+## <small>1.0.1 (2026-01-21)</small>
+
+* chore: add release scripts for versioning increments ([d79b302](https://github.com/marcusvramos/cinema-book-system/commit/d79b302))
+* docs: update readme to detail dual-layer protection strategy for seat reservations ([e1a73dc](https://github.com/marcusvramos/cinema-book-system/commit/e1a73dc))
+* refactor: apply solid and dry principles across messaging and services ([b5bdc4c](https://github.com/marcusvramos/cinema-book-system/commit/b5bdc4c))
+* refactor: extract response mapping helper in sessions controller ([35ddef9](https://github.com/marcusvramos/cinema-book-system/commit/35ddef9))
+* test: add comprehensive unit tests for controllers, guards, filters and utilities ([9a75aa4](https://github.com/marcusvramos/cinema-book-system/commit/9a75aa4))
+
 ## 1.0.0 (2026-01-20)
 
 * fix: simplify release-it config ([5bc8fba](https://github.com/marcusvramos/cinema-book-system/commit/5bc8fba))
