@@ -5,7 +5,13 @@ import { CinemaEvent, EventType } from '../publishers/event.types';
 import { withRetry, MESSAGE_RETRY_OPTIONS } from '@common/utils/retry.util';
 import { MESSAGING_CONSTANTS, QUEUE_CONFIGS } from '../messaging.constants';
 import { setupAmqpInfrastructure } from '../amqp-setup.util';
-import { EVENT_HANDLERS, EventHandlerStrategy } from '../strategies';
+import {
+  EventHandlerStrategy,
+  ReservationCreatedHandler,
+  ReservationExpiredHandler,
+  PaymentConfirmedHandler,
+  SeatReleasedHandler,
+} from '../strategies';
 
 interface PendingMessage {
   msg: amqp.ConsumeMessage;
@@ -25,13 +31,26 @@ export class EventConsumer implements OnModuleInit, OnModuleDestroy {
 
   private readonly handlerStrategies: Map<EventType, EventHandlerStrategy> = new Map();
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly reservationCreatedHandler: ReservationCreatedHandler,
+    private readonly reservationExpiredHandler: ReservationExpiredHandler,
+    private readonly paymentConfirmedHandler: PaymentConfirmedHandler,
+    private readonly seatReleasedHandler: SeatReleasedHandler,
+  ) {
     QUEUE_CONFIGS.forEach((q) => this.pendingMessages.set(q.name, []));
     this.registerHandlerStrategies();
   }
 
   private registerHandlerStrategies(): void {
-    EVENT_HANDLERS.forEach((handler) => {
+    const handlers: EventHandlerStrategy[] = [
+      this.reservationCreatedHandler,
+      this.reservationExpiredHandler,
+      this.paymentConfirmedHandler,
+      this.seatReleasedHandler,
+    ];
+
+    handlers.forEach((handler) => {
       this.handlerStrategies.set(handler.eventType, handler);
     });
   }
@@ -168,9 +187,8 @@ export class EventConsumer implements OnModuleInit, OnModuleDestroy {
 
     try {
       await withRetry(
-        () => {
-          this.processEvent(payload);
-          return Promise.resolve();
+        async () => {
+          await this.processEvent(payload);
         },
         MESSAGE_RETRY_OPTIONS,
         this.logger,
@@ -203,7 +221,7 @@ export class EventConsumer implements OnModuleInit, OnModuleDestroy {
     await Promise.all(flushPromises);
   }
 
-  private processEvent(event: CinemaEvent): void {
+  private async processEvent(event: CinemaEvent): Promise<void> {
     if (!event || !event.eventId || !event.type) {
       throw new Error('Invalid event payload');
     }
@@ -213,6 +231,6 @@ export class EventConsumer implements OnModuleInit, OnModuleDestroy {
       throw new Error(`Unhandled event type: ${event.type}`);
     }
 
-    strategy.handle(event);
+    await strategy.handle(event);
   }
 }

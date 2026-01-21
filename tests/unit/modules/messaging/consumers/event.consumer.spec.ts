@@ -1,6 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { EventConsumer } from '@modules/messaging/consumers/event.consumer';
+import {
+  ReservationCreatedHandler,
+  ReservationExpiredHandler,
+  PaymentConfirmedHandler,
+  SeatReleasedHandler,
+} from '@modules/messaging/strategies';
+import { RedisStatsService } from '@infrastructure/redis/redis-stats.service';
 import * as amqp from 'amqplib';
 
 jest.mock('amqplib', () => ({
@@ -9,6 +16,15 @@ jest.mock('amqplib', () => ({
 
 type ConsumeCallback = (msg: amqp.ConsumeMessage | null) => void;
 type ConnectionEventHandler = () => void;
+
+interface MockRedisStatsService {
+  incrementSessionSales: jest.Mock;
+  incrementGlobalStats: jest.Mock;
+  getSessionStats: jest.Mock;
+  getGlobalStats: jest.Mock;
+  incrementCounter: jest.Mock;
+  getCounter: jest.Mock;
+}
 
 describe('EventConsumer', () => {
   let consumer: EventConsumer;
@@ -27,6 +43,15 @@ describe('EventConsumer', () => {
     createChannel: jest.Mock;
     on: jest.Mock;
     close: jest.Mock;
+  };
+
+  const mockRedisStatsService: MockRedisStatsService = {
+    incrementSessionSales: jest.fn().mockResolvedValue(undefined),
+    incrementGlobalStats: jest.fn().mockResolvedValue(undefined),
+    getSessionStats: jest.fn().mockResolvedValue({ salesCount: 1, totalRevenue: 25.0 }),
+    getGlobalStats: jest.fn().mockResolvedValue({ totalSales: 10, totalRevenue: 250.0 }),
+    incrementCounter: jest.fn().mockResolvedValue(1),
+    getCounter: jest.fn().mockResolvedValue(0),
   };
 
   beforeEach(async () => {
@@ -54,6 +79,18 @@ describe('EventConsumer', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventConsumer,
+        ReservationCreatedHandler,
+        ReservationExpiredHandler,
+        SeatReleasedHandler,
+        {
+          provide: PaymentConfirmedHandler,
+          useFactory: () =>
+            new PaymentConfirmedHandler(mockRedisStatsService as unknown as RedisStatsService),
+        },
+        {
+          provide: RedisStatsService,
+          useValue: mockRedisStatsService,
+        },
         {
           provide: ConfigService,
           useValue: {
@@ -236,7 +273,7 @@ describe('EventConsumer', () => {
       const eventTypes = [
         { type: 'reservation.created', data: { reservationId: 'res-1' } },
         { type: 'reservation.expired', data: { reservationId: 'res-2' } },
-        { type: 'payment.confirmed', data: { saleId: 'sale-1' } },
+        { type: 'payment.confirmed', data: { saleId: 'sale-1', amount: 25 } },
         { type: 'seat.released', data: { sessionId: 'session-1', seatIds: ['s1', 's2'] } },
       ];
 
@@ -261,6 +298,38 @@ describe('EventConsumer', () => {
 
       await Promise.resolve();
       await Promise.resolve();
+    });
+
+    it('should update Redis stats on payment confirmed', async () => {
+      await consumer.onModuleInit();
+
+      const consumeCallback = getConsumeCallback(2);
+      const mockMessage = {
+        content: Buffer.from(
+          JSON.stringify({
+            eventId: 'evt-pay-1',
+            type: 'payment.confirmed',
+            saleId: 'sale-123',
+            sessionId: 'session-456',
+            amount: 50,
+            timestamp: new Date().toISOString(),
+          }),
+        ),
+        fields: { deliveryTag: 1 },
+        properties: {},
+      } as unknown as amqp.ConsumeMessage;
+
+      consumeCallback(mockMessage);
+
+      jest.advanceTimersByTime(1500);
+
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(mockRedisStatsService.incrementSessionSales).toHaveBeenCalledWith('session-456', 50);
+      expect(mockRedisStatsService.incrementGlobalStats).toHaveBeenCalledWith(50);
     });
   });
 
