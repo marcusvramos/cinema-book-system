@@ -74,8 +74,8 @@ describe('SessionsService', () => {
       };
 
       mockSessionRepository.findOne
-        .mockResolvedValueOnce(null) // Check for existing
-        .mockResolvedValueOnce(sessionWithSeats); // findById after create
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(sessionWithSeats);
       mockSessionRepository.create.mockReturnValue(savedSession);
       mockSessionRepository.save.mockResolvedValue(savedSession);
       mockSeatRepository.create.mockImplementation((data: SeatData): SeatData => data);

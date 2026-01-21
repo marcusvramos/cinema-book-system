@@ -217,7 +217,7 @@ describe('ReservationsService', () => {
       mockQueryRunner.manager.findOne.mockResolvedValue(session);
       mockQueryRunner.manager.find.mockResolvedValue([
         { id: 'seat-1', status: SeatStatus.AVAILABLE },
-      ]); // Only 1 of 2 seats found
+      ]);
 
       await expect(service.create(createReservationDto)).rejects.toThrow(BadRequestException);
       await expect(service.create(createReservationDto)).rejects.toThrow(

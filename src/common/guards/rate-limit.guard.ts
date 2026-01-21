@@ -59,9 +59,7 @@ export class RateLimitGuard implements CanActivate {
 
       if (!result.allowed) {
         response.set('Retry-After', result.retryAfter.toString());
-        this.logger.warn(
-          'Rate limit exceeded for ' + key + ' - ' + result.remaining + '/' + config.points,
-        );
+        this.logger.warn(`Rate limit exceeded for ${key} - ${result.remaining}/${config.points}`);
         throw new HttpException(
           {
             statusCode: HttpStatus.TOO_MANY_REQUESTS,
@@ -79,7 +77,7 @@ export class RateLimitGuard implements CanActivate {
         throw error;
       }
       const errMsg = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error('Rate limit check failed: ' + errMsg);
+      this.logger.error(`Rate limit check failed: ${errMsg}`);
       return true;
     }
   }
@@ -103,13 +101,13 @@ export class RateLimitGuard implements CanActivate {
 
     const path = request.path.replace(/\//g, ':');
 
-    return config.keyPrefix + ':' + ip + ':' + userId + ':' + path;
+    return `${config.keyPrefix}:${ip}:${userId}:${path}`;
   }
 
   private async checkRateLimit(key: string, config: RateLimitConfig): Promise<RateLimitResult> {
     const now = Date.now();
-    const windowKey = key + ':' + Math.floor(now / (config.duration * 1000));
-    const blockKey = key + ':blocked';
+    const windowKey = `${key}:${Math.floor(now / (config.duration * 1000))}`;
+    const blockKey = `${key}:blocked`;
 
     const blocked = await this.redis.get(blockKey);
     if (blocked) {

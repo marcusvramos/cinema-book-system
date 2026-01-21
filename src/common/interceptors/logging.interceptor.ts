@@ -2,6 +2,7 @@ import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } fr
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { Request, Response } from 'express';
+import { getErrorStatus, getErrorMessageString } from '@common/utils/error.util';
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
@@ -39,41 +40,13 @@ export class LoggingInterceptor implements NestInterceptor {
         },
         error: (error: unknown) => {
           const duration = Date.now() - now;
-          const statusCode = this.getErrorStatus(error);
-          const message = this.getErrorMessage(error);
+          const statusCode = getErrorStatus(error);
+          const message = getErrorMessageString(error);
           this.logger.error(
             `[ERROR] ${method} ${url} - ${statusCode} - ${duration}ms - ${message}`,
           );
         },
       }),
     );
-  }
-
-  private getErrorStatus(error: unknown): number {
-    if (!error || typeof error !== 'object') {
-      return 500;
-    }
-
-    const status = (error as { status?: unknown; statusCode?: unknown }).status;
-    const statusCode = status ?? (error as { statusCode?: unknown }).statusCode;
-
-    if (typeof statusCode === 'number') {
-      return statusCode;
-    }
-
-    if (typeof statusCode === 'string') {
-      const parsed = Number(statusCode);
-      return Number.isFinite(parsed) ? parsed : 500;
-    }
-
-    return 500;
-  }
-
-  private getErrorMessage(error: unknown): string {
-    if (error instanceof Error) {
-      return error.message;
-    }
-
-    return 'Unknown error';
   }
 }

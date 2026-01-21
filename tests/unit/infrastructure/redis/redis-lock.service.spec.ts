@@ -117,7 +117,10 @@ describe('RedisLockService', () => {
     it('should return lock token on first successful attempt', async () => {
       mockRedis.set.mockResolvedValue('OK');
 
-      const result = await service.acquireLockWithRetry('test-resource', 5000, 3, 100);
+      const result = await service.acquireLockWithRetry('test-resource', 5000, {
+        maxRetries: 3,
+        baseDelayMs: 100,
+      });
 
       expect(result).toBeTruthy();
       expect(mockRedis.set).toHaveBeenCalledTimes(1);
@@ -125,11 +128,15 @@ describe('RedisLockService', () => {
 
     it('should retry and succeed on subsequent attempt', async () => {
       mockRedis.set
-        .mockResolvedValueOnce(null) // First attempt fails
-        .mockResolvedValueOnce(null) // Second attempt fails
-        .mockResolvedValueOnce('OK'); // Third attempt succeeds
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce('OK');
 
-      const result = await service.acquireLockWithRetry('test-resource', 5000, 5, 10);
+      const result = await service.acquireLockWithRetry('test-resource', 5000, {
+        maxRetries: 5,
+        baseDelayMs: 10,
+        jitterFactor: 0,
+      });
 
       expect(result).toBeTruthy();
       expect(mockRedis.set).toHaveBeenCalledTimes(3);
@@ -138,7 +145,11 @@ describe('RedisLockService', () => {
     it('should return null after all retries exhausted', async () => {
       mockRedis.set.mockResolvedValue(null);
 
-      const result = await service.acquireLockWithRetry('test-resource', 5000, 3, 10);
+      const result = await service.acquireLockWithRetry('test-resource', 5000, {
+        maxRetries: 3,
+        baseDelayMs: 10,
+        jitterFactor: 0,
+      });
 
       expect(result).toBeNull();
       expect(mockRedis.set).toHaveBeenCalledTimes(3);
@@ -156,7 +167,7 @@ describe('RedisLockService', () => {
 
       expect(result).toBe('result');
       expect(mockFn).toHaveBeenCalled();
-      expect(mockRedis.eval).toHaveBeenCalled(); // Lock released
+      expect(mockRedis.eval).toHaveBeenCalled();
     });
 
     it('should release lock even when function throws', async () => {
@@ -169,11 +180,11 @@ describe('RedisLockService', () => {
         'Function error',
       );
 
-      expect(mockRedis.eval).toHaveBeenCalled(); // Lock released
+      expect(mockRedis.eval).toHaveBeenCalled();
     });
   });
 
-  describe('acquireLockWithExponentialBackoff', () => {
+  describe('acquireLockWithRetry with custom options', () => {
     it('should use exponential backoff delays between retries', async () => {
       mockRedis.set
         .mockResolvedValueOnce(null)
@@ -181,7 +192,7 @@ describe('RedisLockService', () => {
         .mockResolvedValueOnce('OK');
 
       const startTime = Date.now();
-      await service.acquireLockWithExponentialBackoff('test-resource', 5000, {
+      await service.acquireLockWithRetry('test-resource', 5000, {
         maxRetries: 5,
         baseDelayMs: 50,
         maxDelayMs: 1000,
@@ -190,14 +201,13 @@ describe('RedisLockService', () => {
       });
       const elapsed = Date.now() - startTime;
 
-      // With 0 jitter: 50ms (first) + 100ms (second) = 150ms minimum
       expect(elapsed).toBeGreaterThanOrEqual(100);
     });
 
-    it('should return null after max retries with exponential backoff', async () => {
+    it('should return null after max retries with custom options', async () => {
       mockRedis.set.mockResolvedValue(null);
 
-      const result = await service.acquireLockWithExponentialBackoff('test-resource', 5000, {
+      const result = await service.acquireLockWithRetry('test-resource', 5000, {
         maxRetries: 2,
         baseDelayMs: 10,
         maxDelayMs: 100,

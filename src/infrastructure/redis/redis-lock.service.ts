@@ -1,27 +1,7 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from './redis.constants';
-import {
-  calculateBackoffDelay,
-  RetryOptions,
-  DEFAULT_RETRY_OPTIONS,
-} from '@common/utils/retry.util';
-
-export interface LockRetryOptions {
-  maxRetries: number;
-  baseDelayMs: number;
-  maxDelayMs: number;
-  backoffMultiplier: number;
-  jitterFactor: number;
-}
-
-const DEFAULT_LOCK_RETRY: LockRetryOptions = {
-  maxRetries: 10,
-  baseDelayMs: 50,
-  maxDelayMs: 2000,
-  backoffMultiplier: 2,
-  jitterFactor: 0.3,
-};
+import { calculateBackoffDelay, RetryOptions, LOCK_RETRY_OPTIONS } from '@common/utils/retry.util';
 
 @Injectable()
 export class RedisLockService {
@@ -69,16 +49,11 @@ export class RedisLockService {
   async acquireLockWithRetry(
     resource: string,
     ttlMs: number = 5000,
-    maxRetries: number = 10,
-    retryDelayMs: number = 100,
+    options: Partial<RetryOptions> = {},
   ): Promise<string | null> {
-    const options: RetryOptions = {
-      ...DEFAULT_RETRY_OPTIONS,
-      maxRetries,
-      baseDelayMs: retryDelayMs,
-    };
+    const opts: RetryOptions = { ...LOCK_RETRY_OPTIONS, ...options };
 
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
+    for (let attempt = 0; attempt < opts.maxRetries; attempt++) {
       const lockToken = await this.acquireLock(resource, ttlMs);
       if (lockToken) {
         if (attempt > 0) {
@@ -87,49 +62,16 @@ export class RedisLockService {
         return lockToken;
       }
 
-      const delay = calculateBackoffDelay(attempt, options);
-      this.logger.debug(
-        `Lock attempt ${attempt + 1}/${maxRetries} failed for ${resource}, waiting ${delay}ms`,
-      );
-      await this.sleep(delay);
-    }
-
-    this.logger.warn(`Failed to acquire lock for ${resource} after ${maxRetries} attempts`);
-    return null;
-  }
-
-  async acquireLockWithExponentialBackoff(
-    resource: string,
-    ttlMs: number = 5000,
-    options: Partial<LockRetryOptions> = {},
-  ): Promise<string | null> {
-    const opts = { ...DEFAULT_LOCK_RETRY, ...options };
-    const retryOptions: RetryOptions = {
-      maxRetries: opts.maxRetries,
-      baseDelayMs: opts.baseDelayMs,
-      maxDelayMs: opts.maxDelayMs,
-      backoffMultiplier: opts.backoffMultiplier,
-      jitterFactor: opts.jitterFactor,
-    };
-
-    for (let attempt = 0; attempt < opts.maxRetries; attempt++) {
-      const lockToken = await this.acquireLock(resource, ttlMs);
-      if (lockToken) {
-        return lockToken;
-      }
-
       if (attempt < opts.maxRetries - 1) {
-        const delay = calculateBackoffDelay(attempt, retryOptions);
+        const delay = calculateBackoffDelay(attempt, opts);
         this.logger.debug(
-          `Lock retry ${attempt + 1}/${opts.maxRetries} for ${resource}, backoff ${delay}ms`,
+          `Lock attempt ${attempt + 1}/${opts.maxRetries} failed for ${resource}, backoff ${delay}ms`,
         );
         await this.sleep(delay);
       }
     }
 
-    this.logger.warn(
-      `Failed to acquire lock for ${resource} after ${opts.maxRetries} attempts with exponential backoff`,
-    );
+    this.logger.warn(`Failed to acquire lock for ${resource} after ${opts.maxRetries} attempts`);
     return null;
   }
 

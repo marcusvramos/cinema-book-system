@@ -16,6 +16,22 @@ export const DEFAULT_RETRY_OPTIONS: RetryOptions = {
   jitterFactor: 0.3,
 };
 
+export const LOCK_RETRY_OPTIONS: RetryOptions = {
+  maxRetries: 10,
+  baseDelayMs: 50,
+  maxDelayMs: 2000,
+  backoffMultiplier: 2,
+  jitterFactor: 0.3,
+};
+
+export const MESSAGE_RETRY_OPTIONS: RetryOptions = {
+  maxRetries: 3,
+  baseDelayMs: 100,
+  maxDelayMs: 1000,
+  backoffMultiplier: 2,
+  jitterFactor: 0.3,
+};
+
 export function calculateBackoffDelay(attempt: number, options: RetryOptions): number {
   const exponentialDelay = options.baseDelayMs * Math.pow(options.backoffMultiplier, attempt);
   const cappedDelay = Math.min(exponentialDelay, options.maxDelayMs);

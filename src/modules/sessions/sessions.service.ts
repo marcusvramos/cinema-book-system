@@ -5,6 +5,7 @@ import { Session } from './entities/session.entity';
 import { Seat, SeatStatus } from './entities/seat.entity';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { SeatAvailabilityResponseDto } from './dto/seat-availability-response.dto';
+import { countSeatsByStatus } from '@common/utils/seat.util';
 
 @Injectable()
 export class SessionsService {
@@ -70,9 +71,7 @@ export class SessionsService {
       order: { seatLabel: 'ASC' },
     });
 
-    const availableSeats = seats.filter((s) => s.status === SeatStatus.AVAILABLE).length;
-    const reservedSeats = seats.filter((s) => s.status === SeatStatus.RESERVED).length;
-    const soldSeats = seats.filter((s) => s.status === SeatStatus.SOLD).length;
+    const seatCounts = countSeatsByStatus(seats);
 
     return {
       sessionId: session.id,
@@ -80,10 +79,10 @@ export class SessionsService {
       room: session.room,
       startTime: session.startTime,
       ticketPrice: Number(session.ticketPrice),
-      totalSeats: seats.length,
-      availableSeats,
-      reservedSeats,
-      soldSeats,
+      totalSeats: seatCounts.total,
+      availableSeats: seatCounts.available,
+      reservedSeats: seatCounts.reserved,
+      soldSeats: seatCounts.sold,
       seats: seats.map((seat) => ({
         id: seat.id,
         seatLabel: seat.seatLabel,

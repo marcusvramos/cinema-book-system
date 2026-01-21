@@ -76,7 +76,7 @@ describe('PaymentsService', () => {
         sessionId: 'session-uuid',
         status: ReservationStatus.PENDING,
         totalAmount: 50.0,
-        expiresAt: new Date(Date.now() + 30000), // Not expired
+        expiresAt: new Date(Date.now() + 30000),
         seats: [
           { id: 'seat-1', seatLabel: 'A1' },
           { id: 'seat-2', seatLabel: 'A2' },
@@ -97,16 +97,13 @@ describe('PaymentsService', () => {
         session: { movieTitle: 'Avengers', room: 'Sala 1' },
       };
 
-      // First call for lock, second for relations
       mockQueryRunner.manager.findOne
-        .mockResolvedValueOnce(reservation) // Lock query
-        .mockResolvedValueOnce(reservation) // Relations query
-        .mockResolvedValueOnce(null); // Check existing sale
+        .mockResolvedValueOnce(reservation)
+        .mockResolvedValueOnce(reservation)
+        .mockResolvedValueOnce(null);
 
       mockQueryRunner.manager.create.mockReturnValue(sale);
-      mockQueryRunner.manager.save
-        .mockResolvedValueOnce(reservation) // Save reservation status
-        .mockResolvedValueOnce(sale); // Save sale
+      mockQueryRunner.manager.save.mockResolvedValueOnce(reservation).mockResolvedValueOnce(sale);
 
       mockSaleRepository.findOne.mockResolvedValue(saleWithDetails);
 
@@ -141,9 +138,9 @@ describe('PaymentsService', () => {
       };
 
       mockQueryRunner.manager.findOne
-        .mockResolvedValueOnce(reservation) // Lock
-        .mockResolvedValueOnce(reservation) // Relations
-        .mockResolvedValueOnce(existingSale); // Existing sale check
+        .mockResolvedValueOnce(reservation)
+        .mockResolvedValueOnce(reservation)
+        .mockResolvedValueOnce(existingSale);
 
       mockSaleRepository.findOne.mockResolvedValue(saleWithDetails);
 
@@ -173,7 +170,7 @@ describe('PaymentsService', () => {
       mockQueryRunner.manager.findOne
         .mockResolvedValueOnce(reservation)
         .mockResolvedValueOnce(reservation)
-        .mockResolvedValueOnce(null); // No existing sale
+        .mockResolvedValueOnce(null);
 
       await expect(service.confirmPayment(confirmPaymentDto)).rejects.toThrow(
         /Reservation is expired, cannot confirm payment/,
@@ -185,7 +182,7 @@ describe('PaymentsService', () => {
         id: 'reservation-uuid',
         status: ReservationStatus.PENDING,
         seats: [],
-        expiresAt: new Date(Date.now() - 1000), // Expired
+        expiresAt: new Date(Date.now() - 1000),
       };
 
       mockQueryRunner.manager.findOne

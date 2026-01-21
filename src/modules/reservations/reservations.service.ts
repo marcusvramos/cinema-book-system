@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, In } from 'typeorm';
+import { Repository, DataSource, In, EntityManager } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Reservation, ReservationStatus } from './entities/reservation.entity';
 import { Seat, SeatStatus } from '@modules/sessions/entities/seat.entity';
@@ -14,6 +14,10 @@ import { Session } from '@modules/sessions/entities/session.entity';
 import { RedisLockService } from '@infrastructure/redis/redis-lock.service';
 import { EventPublisher } from '@modules/messaging/publishers/event.publisher';
 import { CreateReservationDto } from './dto/create-reservation.dto';
+import { executeInTransaction } from '@infrastructure/database/transaction.util';
+import { isUniqueViolation } from '@common/utils/error.util';
+import { getUnavailableSeatLabels } from '@common/utils/seat.util';
+import { EXPIRATION_BATCH_LIMIT } from '@modules/messaging/messaging.constants';
 
 @Injectable()
 export class ReservationsService {
@@ -82,10 +86,9 @@ export class ReservationsService {
         throw new BadRequestException('One or more seats not found');
       }
 
-      const unavailableSeats = seats.filter((seat) => seat.status !== SeatStatus.AVAILABLE);
-      if (unavailableSeats.length > 0) {
-        const unavailableLabels = unavailableSeats.map((s) => s.seatLabel).join(', ');
-        throw new ConflictException(`Seats not available: ${unavailableLabels}`);
+      const unavailableLabels = getUnavailableSeatLabels(seats);
+      if (unavailableLabels.length > 0) {
+        throw new ConflictException(`Seats not available: ${unavailableLabels.join(', ')}`);
       }
 
       const totalAmount = seats.length * Number(session.ticketPrice);
@@ -120,7 +123,7 @@ export class ReservationsService {
       return savedReservation;
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      if (idempotencyKey && this.isUniqueViolation(error)) {
+      if (idempotencyKey && isUniqueViolation(error)) {
         const existing = await this.reservationRepository.findOne({
           where: { idempotencyKey },
           relations: ['seats'],
@@ -161,7 +164,7 @@ export class ReservationsService {
     return this.releaseReservation(reservation, ReservationStatus.CANCELLED);
   }
 
-  async expirePendingReservations(limit = 50): Promise<number> {
+  async expirePendingReservations(limit = EXPIRATION_BATCH_LIMIT): Promise<number> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -235,43 +238,20 @@ export class ReservationsService {
     reservation: Reservation,
     status: ReservationStatus,
   ): Promise<Reservation> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    const seatIds = reservation.seats.map((s) => s.id);
 
-    try {
+    await executeInTransaction(this.dataSource, async (manager: EntityManager) => {
       reservation.status = status;
-      await queryRunner.manager.save(reservation);
+      await manager.save(reservation);
 
-      const seatIds = reservation.seats.map((s) => s.id);
       if (seatIds.length > 0) {
-        await queryRunner.manager.update(
-          Seat,
-          { id: In(seatIds) },
-          { status: SeatStatus.AVAILABLE },
-        );
+        await manager.update(Seat, { id: In(seatIds) }, { status: SeatStatus.AVAILABLE });
       }
+    });
 
-      await queryRunner.commitTransaction();
+    this.logger.log(`Reservation ${status.toLowerCase()}: ${reservation.id}`);
+    await this.eventPublisher.publishSeatReleased(reservation.sessionId, seatIds);
 
-      this.logger.log(`Reservation ${status.toLowerCase()}: ${reservation.id}`);
-
-      await this.eventPublisher.publishSeatReleased(reservation.sessionId, seatIds);
-
-      return reservation;
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      throw error;
-    } finally {
-      await queryRunner.release();
-    }
-  }
-
-  private isUniqueViolation(error: unknown): boolean {
-    if (!error || typeof error !== 'object') {
-      return false;
-    }
-
-    return (error as { code?: string }).code === '23505';
+    return reservation;
   }
 }

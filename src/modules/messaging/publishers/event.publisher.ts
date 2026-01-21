@@ -3,13 +3,14 @@ import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import * as amqp from 'amqplib';
 import { PaymentEvent, ReservationEvent, SeatEvent } from './event.types';
+import { MESSAGING_CONSTANTS } from '../messaging.constants';
+import { setupAmqpInfrastructure } from '../amqp-setup.util';
 
 @Injectable()
 export class EventPublisher implements OnModuleInit {
   private readonly logger = new Logger(EventPublisher.name);
   private connection: amqp.ChannelModel | null = null;
   private channel: amqp.ConfirmChannel | null = null;
-  private readonly exchangeName = 'cinema.events';
   private isConnected = false;
 
   constructor(private readonly configService: ConfigService) {}
@@ -29,31 +30,7 @@ export class EventPublisher implements OnModuleInit {
       this.connection = await amqp.connect(url);
       this.channel = await this.connection.createConfirmChannel();
 
-      await this.channel.assertExchange(this.exchangeName, 'topic', {
-        durable: true,
-      });
-
-      await this.channel.assertQueue('cinema.dlq', {
-        durable: true,
-      });
-
-      const queues = [
-        'reservation.created',
-        'reservation.expired',
-        'payment.confirmed',
-        'seat.released',
-      ];
-
-      for (const queue of queues) {
-        await this.channel.assertQueue(`cinema.${queue}`, {
-          durable: true,
-          arguments: {
-            'x-dead-letter-exchange': '',
-            'x-dead-letter-routing-key': 'cinema.dlq',
-          },
-        });
-        await this.channel.bindQueue(`cinema.${queue}`, this.exchangeName, queue);
-      }
+      await setupAmqpInfrastructure(this.channel);
 
       this.isConnected = true;
       this.logger.log('Connected to RabbitMQ');
@@ -66,12 +43,12 @@ export class EventPublisher implements OnModuleInit {
       this.connection.on('close', () => {
         this.logger.warn('RabbitMQ connection closed');
         this.isConnected = false;
-        setTimeout(() => void this.connect(), 5000);
+        setTimeout(() => void this.connect(), MESSAGING_CONSTANTS.RECONNECT_DELAY_MS);
       });
     } catch (error) {
       const err = error as Error;
       this.logger.error(`Failed to connect to RabbitMQ: ${err.message}`);
-      setTimeout(() => void this.connect(), 5000);
+      setTimeout(() => void this.connect(), MESSAGING_CONSTANTS.RECONNECT_DELAY_MS);
     }
   }
 
@@ -85,13 +62,18 @@ export class EventPublisher implements OnModuleInit {
     }
 
     try {
-      this.channel.publish(this.exchangeName, routingKey, Buffer.from(JSON.stringify(message)), {
-        persistent: true,
-        contentType: 'application/json',
-        messageId: message.eventId,
-        type: message.type,
-        timestamp: Math.floor(Date.now() / 1000),
-      });
+      this.channel.publish(
+        MESSAGING_CONSTANTS.EXCHANGE_NAME,
+        routingKey,
+        Buffer.from(JSON.stringify(message)),
+        {
+          persistent: true,
+          contentType: 'application/json',
+          messageId: message.eventId,
+          type: message.type,
+          timestamp: Math.floor(Date.now() / 1000),
+        },
+      );
       await this.channel.waitForConfirms();
       this.logger.debug(`Published message to ${routingKey}: ${JSON.stringify(message)}`);
     } catch (error) {
@@ -100,21 +82,28 @@ export class EventPublisher implements OnModuleInit {
     }
   }
 
-  async publishReservationCreated(reservation: {
-    id: string;
-    userId: string;
-    sessionId: string;
-    seats?: { id: string }[];
-  }): Promise<void> {
-    const event: ReservationEvent = {
+  private createReservationEvent(
+    type: 'reservation.created' | 'reservation.expired',
+    reservation: { id: string; userId: string; sessionId: string; seats?: { id: string }[] },
+  ): ReservationEvent {
+    return {
       eventId: randomUUID(),
-      type: 'reservation.created',
+      type,
       reservationId: reservation.id,
       userId: reservation.userId,
       sessionId: reservation.sessionId,
       seatIds: reservation.seats?.map((s) => s.id) || [],
       timestamp: new Date().toISOString(),
     };
+  }
+
+  async publishReservationCreated(reservation: {
+    id: string;
+    userId: string;
+    sessionId: string;
+    seats?: { id: string }[];
+  }): Promise<void> {
+    const event = this.createReservationEvent('reservation.created', reservation);
     await this.publish('reservation.created', event);
   }
 
@@ -124,15 +113,7 @@ export class EventPublisher implements OnModuleInit {
     sessionId: string;
     seats?: { id: string }[];
   }): Promise<void> {
-    const event: ReservationEvent = {
-      eventId: randomUUID(),
-      type: 'reservation.expired',
-      reservationId: reservation.id,
-      userId: reservation.userId,
-      sessionId: reservation.sessionId,
-      seatIds: reservation.seats?.map((s) => s.id) || [],
-      timestamp: new Date().toISOString(),
-    };
+    const event = this.createReservationEvent('reservation.expired', reservation);
     await this.publish('reservation.expired', event);
   }
 

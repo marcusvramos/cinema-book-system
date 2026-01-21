@@ -2,17 +2,10 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import * as amqp from 'amqplib';
 import { CinemaEvent, EventType } from '../publishers/event.types';
-import { withRetry } from '@common/utils/retry.util';
-
-type QueueConfig = {
-  name: string;
-  routingKey: EventType;
-};
-
-interface BatchConfig {
-  size: number;
-  timeoutMs: number;
-}
+import { withRetry, MESSAGE_RETRY_OPTIONS } from '@common/utils/retry.util';
+import { MESSAGING_CONSTANTS, QUEUE_CONFIGS } from '../messaging.constants';
+import { setupAmqpInfrastructure } from '../amqp-setup.util';
+import { EVENT_HANDLERS, EventHandlerStrategy } from '../strategies';
 
 interface PendingMessage {
   msg: amqp.ConsumeMessage;
@@ -26,25 +19,21 @@ export class EventConsumer implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(EventConsumer.name);
   private connection: amqp.ChannelModel | null = null;
   private channel: amqp.Channel | null = null;
-  private readonly exchangeName = 'cinema.events';
-
-  private readonly batchConfig: BatchConfig = {
-    size: 10,
-    timeoutMs: 1000,
-  };
 
   private pendingMessages: Map<string, PendingMessage[]> = new Map();
   private batchTimers: Map<string, NodeJS.Timeout> = new Map();
 
-  private readonly queues: QueueConfig[] = [
-    { name: 'cinema.reservation.created', routingKey: 'reservation.created' },
-    { name: 'cinema.reservation.expired', routingKey: 'reservation.expired' },
-    { name: 'cinema.payment.confirmed', routingKey: 'payment.confirmed' },
-    { name: 'cinema.seat.released', routingKey: 'seat.released' },
-  ];
+  private readonly handlerStrategies: Map<EventType, EventHandlerStrategy> = new Map();
 
   constructor(private readonly configService: ConfigService) {
-    this.queues.forEach((q) => this.pendingMessages.set(q.name, []));
+    QUEUE_CONFIGS.forEach((q) => this.pendingMessages.set(q.name, []));
+    this.registerHandlerStrategies();
+  }
+
+  private registerHandlerStrategies(): void {
+    EVENT_HANDLERS.forEach((handler) => {
+      this.handlerStrategies.set(handler.eventType, handler);
+    });
   }
 
   async onModuleInit(): Promise<void> {
@@ -72,33 +61,20 @@ export class EventConsumer implements OnModuleInit, OnModuleDestroy {
       this.connection = await amqp.connect(url);
       this.channel = await this.connection.createChannel();
 
-      await this.channel.assertExchange(this.exchangeName, 'topic', {
-        durable: true,
-      });
+      await setupAmqpInfrastructure(this.channel);
 
-      await this.channel.assertQueue('cinema.dlq', { durable: true });
+      const prefetchCount =
+        MESSAGING_CONSTANTS.BATCH_SIZE * MESSAGING_CONSTANTS.PREFETCH_MULTIPLIER;
+      await this.channel.prefetch(prefetchCount);
 
-      for (const queue of this.queues) {
-        await this.channel.assertQueue(queue.name, {
-          durable: true,
-          arguments: {
-            'x-dead-letter-exchange': '',
-            'x-dead-letter-routing-key': 'cinema.dlq',
-          },
-        });
-        await this.channel.bindQueue(queue.name, this.exchangeName, queue.routingKey);
-      }
-
-      await this.channel.prefetch(this.batchConfig.size * 2);
-
-      for (const queue of this.queues) {
+      for (const queue of QUEUE_CONFIGS) {
         await this.channel.consume(queue.name, (msg) => this.collectForBatch(msg, queue.name), {
           noAck: false,
         });
       }
 
       this.logger.log(
-        `Event consumer connected to RabbitMQ (batch size: ${this.batchConfig.size})`,
+        `Event consumer connected to RabbitMQ (batch size: ${MESSAGING_CONSTANTS.BATCH_SIZE})`,
       );
 
       this.connection.on('error', (err: Error) => {
@@ -107,12 +83,12 @@ export class EventConsumer implements OnModuleInit, OnModuleDestroy {
 
       this.connection.on('close', () => {
         this.logger.warn('RabbitMQ consumer connection closed');
-        setTimeout(() => void this.connect(), 5000);
+        setTimeout(() => void this.connect(), MESSAGING_CONSTANTS.RECONNECT_DELAY_MS);
       });
     } catch (error) {
       const err = error as Error;
       this.logger.error(`Failed to connect consumer: ${err.message}`);
-      setTimeout(() => void this.connect(), 5000);
+      setTimeout(() => void this.connect(), MESSAGING_CONSTANTS.RECONNECT_DELAY_MS);
     }
   }
 
@@ -134,12 +110,12 @@ export class EventConsumer implements OnModuleInit, OnModuleDestroy {
 
       this.pendingMessages.set(queueName, pending);
 
-      if (pending.length >= this.batchConfig.size) {
+      if (pending.length >= MESSAGING_CONSTANTS.BATCH_SIZE) {
         this.processBatch(queueName);
       } else if (!this.batchTimers.has(queueName)) {
         const timer = setTimeout(() => {
           this.processBatch(queueName);
-        }, this.batchConfig.timeoutMs);
+        }, MESSAGING_CONSTANTS.BATCH_TIMEOUT_MS);
         this.batchTimers.set(queueName, timer);
       }
     } catch (error) {
@@ -196,14 +172,9 @@ export class EventConsumer implements OnModuleInit, OnModuleDestroy {
           this.processEvent(payload);
           return Promise.resolve();
         },
-        {
-          maxRetries: 3,
-          baseDelayMs: 100,
-          maxDelayMs: 1000,
-          backoffMultiplier: 2,
-        },
+        MESSAGE_RETRY_OPTIONS,
         this.logger,
-        'Process event ' + payload.eventId,
+        `Process event ${payload.eventId}`,
       );
 
       this.channel?.ack(msg);
@@ -221,11 +192,11 @@ export class EventConsumer implements OnModuleInit, OnModuleDestroy {
   private async flushAllBatches(): Promise<void> {
     const flushPromises: Promise<void>[] = [];
 
-    for (const queueName of this.queues.map((q) => q.name)) {
-      const pending = this.pendingMessages.get(queueName) || [];
+    for (const queue of QUEUE_CONFIGS) {
+      const pending = this.pendingMessages.get(queue.name) || [];
       if (pending.length > 0) {
-        this.logger.log(`Flushing ${pending.length} pending messages from ${queueName}`);
-        flushPromises.push(Promise.resolve(this.processBatch(queueName)));
+        this.logger.log(`Flushing ${pending.length} pending messages from ${queue.name}`);
+        flushPromises.push(Promise.resolve(this.processBatch(queue.name)));
       }
     }
 
@@ -237,23 +208,11 @@ export class EventConsumer implements OnModuleInit, OnModuleDestroy {
       throw new Error('Invalid event payload');
     }
 
-    switch (event.type) {
-      case 'reservation.created':
-        this.logger.log(`Event ${event.eventId}: reservation created ${event.reservationId}`);
-        return;
-      case 'reservation.expired':
-        this.logger.log(`Event ${event.eventId}: reservation expired ${event.reservationId}`);
-        return;
-      case 'payment.confirmed':
-        this.logger.log(`Event ${event.eventId}: payment confirmed ${event.saleId}`);
-        return;
-      case 'seat.released':
-        this.logger.log(`Event ${event.eventId}: seats released ${event.seatIds.length}`);
-        return;
-      default: {
-        const unknownEvent = event as { type?: string };
-        throw new Error(`Unhandled event type: ${unknownEvent.type ?? 'unknown'}`);
-      }
+    const strategy = this.handlerStrategies.get(event.type);
+    if (!strategy) {
+      throw new Error(`Unhandled event type: ${event.type}`);
     }
+
+    strategy.handle(event);
   }
 }
