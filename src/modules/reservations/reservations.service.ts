@@ -188,15 +188,15 @@ export class ReservationsService {
         return 0;
       }
 
-      for (const reservation of reservations) {
-        const fullReservation = await queryRunner.manager.findOne(Reservation, {
-          where: { id: reservation.id },
-          relations: ['seats'],
-        });
+      const reservationIds = reservations.map((r) => r.id);
+      const reservationsWithSeats = await queryRunner.manager.find(Reservation, {
+        where: { id: In(reservationIds) },
+        relations: ['seats'],
+      });
 
-        if (fullReservation) {
-          reservation.seats = fullReservation.seats;
-        }
+      const seatsMap = new Map(reservationsWithSeats.map((r) => [r.id, r.seats]));
+      for (const reservation of reservations) {
+        reservation.seats = seatsMap.get(reservation.id) || [];
       }
 
       for (const reservation of reservations) {

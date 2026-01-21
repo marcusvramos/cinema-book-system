@@ -53,7 +53,7 @@ export function getErrorMessageString(error: unknown): string {
   return Array.isArray(message) ? message.join(', ') : message;
 }
 
-export function getHttpErrorName(status: number): string {
+function getHttpErrorName(status: number): string {
   const errorNames: Record<number, string> = {
     [HttpStatus.BAD_REQUEST]: 'Bad Request',
     [HttpStatus.UNAUTHORIZED]: 'Unauthorized',
@@ -87,12 +87,4 @@ export function isUniqueViolation(error: unknown): boolean {
   }
 
   return (error as { code?: string }).code === '23505';
-}
-
-export function isForeignKeyViolation(error: unknown): boolean {
-  if (!error || typeof error !== 'object') {
-    return false;
-  }
-
-  return (error as { code?: string }).code === '23503';
 }

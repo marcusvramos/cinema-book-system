@@ -14,6 +14,4 @@ export const QUEUE_CONFIGS = [
   { name: 'cinema.seat.released', routingKey: 'seat.released' },
 ] as const;
 
-export type QueueRoutingKey = (typeof QUEUE_CONFIGS)[number]['routingKey'];
-
 export const EXPIRATION_BATCH_LIMIT = 50;

@@ -1,8 +1,8 @@
 import { DataSource, EntityManager, QueryRunner } from 'typeorm';
 
-export type IsolationLevel = 'READ COMMITTED' | 'REPEATABLE READ' | 'SERIALIZABLE';
+type IsolationLevel = 'READ COMMITTED' | 'REPEATABLE READ' | 'SERIALIZABLE';
 
-export interface TransactionOptions {
+interface TransactionOptions {
   isolationLevel?: IsolationLevel;
 }
 
@@ -27,11 +27,4 @@ export async function executeInTransaction<T>(
   } finally {
     await queryRunner.release();
   }
-}
-
-export async function executeInSerializableTransaction<T>(
-  dataSource: DataSource,
-  fn: (manager: EntityManager) => Promise<T>,
-): Promise<T> {
-  return executeInTransaction(dataSource, fn, { isolationLevel: 'SERIALIZABLE' });
 }

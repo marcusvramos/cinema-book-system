@@ -4,7 +4,7 @@ export type EventType =
   | 'payment.confirmed'
   | 'seat.released';
 
-export interface BaseEvent {
+interface BaseEvent {
   eventId: string;
   type: EventType;
   timestamp: string;

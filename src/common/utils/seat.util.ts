@@ -1,6 +1,6 @@
 import { SeatStatus } from '@modules/sessions/entities/seat.entity';
 
-export interface SeatStatusCount {
+interface SeatStatusCount {
   available: number;
   reserved: number;
   sold: number;

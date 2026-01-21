@@ -37,8 +37,6 @@ describe('ReservationsService', () => {
 
   const mockRedisLockService = {
     withLock: jest.fn(),
-    acquireLock: jest.fn(),
-    releaseLock: jest.fn(),
   };
 
   const mockEventPublisher = {
@@ -422,12 +420,7 @@ describe('ReservationsService', () => {
       };
 
       mockQueryRunner.manager.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-      mockQueryRunner.manager.findOne.mockImplementation(
-        (_entity: unknown, options: { where: { id: string } }) => {
-          const reservation = expiredReservations.find((r) => r.id === options.where.id);
-          return Promise.resolve(reservation);
-        },
-      );
+      mockQueryRunner.manager.find.mockResolvedValue(expiredReservations);
       mockQueryRunner.manager.save.mockImplementation((reservation: MockReservation) =>
         Promise.resolve(reservation),
       );
@@ -476,7 +469,7 @@ describe('ReservationsService', () => {
       };
 
       mockQueryRunner.manager.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-      mockQueryRunner.manager.findOne.mockResolvedValue(expiredReservation);
+      mockQueryRunner.manager.find.mockResolvedValue([expiredReservation]);
       mockQueryRunner.manager.save.mockResolvedValue(expiredReservation);
 
       await service.expirePendingReservations();

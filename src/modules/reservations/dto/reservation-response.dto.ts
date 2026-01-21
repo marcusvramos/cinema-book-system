@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ReservationSeatDto } from './reservation-seat.dto';
+import { SeatSummaryDto } from '@common/dto/seat-summary.dto';
 
 export class ReservationResponseDto {
   @ApiProperty()
@@ -23,6 +23,6 @@ export class ReservationResponseDto {
   @ApiProperty()
   createdAt: Date;
 
-  @ApiProperty({ type: [ReservationSeatDto] })
-  seats: ReservationSeatDto[];
+  @ApiProperty({ type: [SeatSummaryDto] })
+  seats: SeatSummaryDto[];
 }

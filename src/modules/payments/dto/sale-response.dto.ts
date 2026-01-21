@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { SaleSeatDto } from './sale-seat.dto';
+import { SeatSummaryDto } from '@common/dto/seat-summary.dto';
 
 export class SaleResponseDto {
   @ApiProperty()
@@ -29,6 +29,6 @@ export class SaleResponseDto {
   @ApiProperty()
   paymentConfirmedAt: Date;
 
-  @ApiProperty({ type: [SaleSeatDto] })
-  seats: SaleSeatDto[];
+  @ApiProperty({ type: [SeatSummaryDto] })
+  seats: SeatSummaryDto[];
 }

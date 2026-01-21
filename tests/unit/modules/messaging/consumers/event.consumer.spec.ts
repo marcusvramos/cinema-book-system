@@ -21,9 +21,6 @@ interface MockRedisStatsService {
   incrementSessionSales: jest.Mock;
   incrementGlobalStats: jest.Mock;
   getSessionStats: jest.Mock;
-  getGlobalStats: jest.Mock;
-  incrementCounter: jest.Mock;
-  getCounter: jest.Mock;
 }
 
 describe('EventConsumer', () => {
@@ -49,9 +46,6 @@ describe('EventConsumer', () => {
     incrementSessionSales: jest.fn().mockResolvedValue(undefined),
     incrementGlobalStats: jest.fn().mockResolvedValue(undefined),
     getSessionStats: jest.fn().mockResolvedValue({ salesCount: 1, totalRevenue: 25.0 }),
-    getGlobalStats: jest.fn().mockResolvedValue({ totalSales: 10, totalRevenue: 250.0 }),
-    incrementCounter: jest.fn().mockResolvedValue(1),
-    getCounter: jest.fn().mockResolvedValue(0),
   };
 
   beforeEach(async () => {
