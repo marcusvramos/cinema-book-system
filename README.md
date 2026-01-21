@@ -25,7 +25,7 @@ Este sistema foi desenvolvido para resolver o problema de venda de ingressos de 
 
 ### Por que PostgreSQL + Redis (e não apenas um)?
 
-- **Redis**: Lock rápido e distribuído (5s TTL) - primeira linha de defesa contra race conditions
+- **Redis**: Lock rápido e distribuído (10s TTL) - primeira linha de defesa contra race conditions
 - **PostgreSQL**: Lock pessimista na transação (`FOR UPDATE`) - garante consistência ACID mesmo se o lock do Redis falhar
 
 ### Por que RabbitMQ e não Kafka?
@@ -198,7 +198,7 @@ make help  # Lista todos os comandos
 
 **Solução**: Implementei uma estratégia de **dupla camada de proteção** combinando Redis e PostgreSQL:
 
-1. **Camada 1 - Redis Distributed Lock**: Quando uma requisição chega, o sistema tenta adquirir um lock distribuído no Redis usando `SET NX PX` (set if not exists, with expiration). O lock é criado com uma chave única baseada na sessão e nos assentos solicitados. Se outra requisição tentar reservar os mesmos assentos enquanto o lock existe, ela recebe imediatamente um erro `409 Conflict`. O TTL de 5 segundos garante que o lock seja liberado mesmo se a aplicação falhar.
+1. **Camada 1 - Redis Distributed Lock**: Quando uma requisição chega, o sistema tenta adquirir um lock distribuído no Redis usando `SET NX PX` (set if not exists, with expiration). O lock é criado com uma chave única baseada na sessão e nos assentos solicitados. Se outra requisição tentar reservar os mesmos assentos enquanto o lock existe, ela recebe imediatamente um erro `409 Conflict`. O TTL de 10 segundos garante que o lock seja liberado mesmo se a aplicação falhar.
 
 2. **Camada 2 - PostgreSQL Pessimistic Lock**: Mesmo com o Redis protegendo, uso `SELECT FOR UPDATE` dentro de uma transação `SERIALIZABLE` no PostgreSQL. Isso cria um lock pessimista diretamente nas linhas dos assentos no banco de dados, garantindo consistência ACID mesmo em cenários onde o Redis possa falhar.
 
@@ -212,7 +212,7 @@ Esta abordagem garante que mesmo com milhares de requisições simultâneas, ape
 
 ```typescript
 const lockKey = `reservation:session:${sessionId}:seats:${sortedIds.join(',')}`;
-const acquired = await this.redisLockService.acquireLock(lockKey, 5000);
+const acquired = await this.redisLockService.acquireLock(lockKey, 10000);
 if (!acquired) {
   throw new ConflictException('Seats are being reserved by another user');
 }
@@ -221,7 +221,7 @@ if (!acquired) {
 ### 2. Como garanti coordenação entre múltiplas instâncias
 
 - **Redis como coordenador central**: Todas as instâncias compartilham o mesmo Redis
-- **Locks com TTL**: Se uma instância morrer, o lock expira em 5 segundos
+- **Locks com TTL**: Se uma instância morrer, o lock expira em 10 segundos
 - **Idempotency Key**: Header `Idempotency-Key` previne duplicação por retry
 
 ```typescript
@@ -384,7 +384,7 @@ Assento liberado: AVAILABLE
 
 1. **PostgreSQL `FOR UPDATE SKIP LOCKED`**: Permite que o cron de expiração processe reservas em paralelo sem bloquear outras instâncias.
 
-2. **Redis Lock de 5s + PostgreSQL Lock**: Dupla camada porque Redis pode ter falhas de rede; PostgreSQL garante ACID.
+2. **Redis Lock de 10s + PostgreSQL Lock**: Dupla camada porque Redis pode ter falhas de rede; PostgreSQL garante ACID.
 
 3. **Ordenação de Seats antes do Lock**: Previne deadlock garantindo ordem consistente de aquisição.
 
