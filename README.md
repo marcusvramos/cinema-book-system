@@ -6,10 +6,10 @@ Sistema de venda de ingressos para rede de cinemas com controle de concorrência
 
 Este sistema foi desenvolvido para resolver o problema de venda de ingressos de cinema com alta concorrência, garantindo que:
 
-- ✅ **Nenhum assento seja vendido duas vezes** - mesmo com múltiplas requisições simultâneas
-- ✅ **Reservas temporárias** - expiram automaticamente após 30 segundos
-- ✅ **Multi-instância** - múltiplas instâncias podem rodar simultaneamente
-- ✅ **Mensageria confiável** - eventos publicados com confirmação e DLQ
+- **Nenhum assento seja vendido duas vezes** - mesmo com múltiplas requisições simultâneas
+- **Reservas temporárias** - expiram automaticamente após 30 segundos
+- **Multi-instância** - múltiplas instâncias podem rodar simultaneamente
+- **Mensageria confiável** - eventos publicados com confirmação e DLQ
 
 ---
 
@@ -119,7 +119,7 @@ Não é necessário! Os scripts de teste criam seus próprios dados automaticame
 ### Como executar testes
 
 ```bash
-# Testes unitários (179 testes, 17 suites)
+# Testes unitários (180 testes, 17 suites)
 pnpm test
 
 # Testes com cobertura (~86% coverage)
@@ -396,18 +396,24 @@ Assento liberado: AVAILABLE
 
 7. **Retry com Backoff Exponencial**: 100ms → 200ms → 400ms → 800ms (max 1s) para evitar thundering herd.
 
+8. **Strategy Pattern nos Event Handlers**: Cada tipo de evento tem seu próprio handler, facilitando extensão sem modificar código existente (Open/Closed Principle).
+
+9. **Contadores de Vendas no Redis**: O handler `payment.confirmed` atualiza contadores em tempo real no Redis (vendas por sessão e globais), demonstrando uso real da mensageria.
+
 ---
 
 ## Eventos de Mensageria
 
-| Exchange        | Routing Key           | Quando é publicado         |
-| --------------- | --------------------- | -------------------------- |
-| `cinema.events` | `reservation.created` | Reserva criada com sucesso |
-| `cinema.events` | `reservation.expired` | Reserva expirou (cron job) |
-| `cinema.events` | `payment.confirmed`   | Pagamento confirmado       |
-| `cinema.events` | `seat.released`       | Assento liberado           |
+| Exchange        | Routing Key           | Quando é publicado         | Consumer |
+| --------------- | --------------------- | -------------------------- | -------- |
+| `cinema.events` | `reservation.created` | Reserva criada com sucesso | Log + comentários de implementação futura |
+| `cinema.events` | `reservation.expired` | Reserva expirou (cron job) | Log + comentários de implementação futura |
+| `cinema.events` | `payment.confirmed`   | Pagamento confirmado       | **Atualiza contadores no Redis** (vendas por sessão e global) |
+| `cinema.events` | `seat.released`       | Assento liberado           | Log + comentários de implementação futura |
 
 **Dead Letter Queue**: Mensagens que falham após 3 retries vão para `cinema.dlq`.
+
+**Arquitetura**: Os consumers usam **Strategy Pattern** - cada tipo de evento tem seu próprio handler, facilitando extensão futura.
 
 ---
 
@@ -442,12 +448,24 @@ Retry-After: 60 (quando bloqueado)
 
 ## Melhorias Futuras
 
-- [ ] **Autenticação JWT** com refresh tokens
-- [ ] **Circuit Breaker** para chamadas externas
-- [ ] **Métricas** com Prometheus/Grafana
-- [ ] **WebSockets** para atualização em tempo real dos assentos
-- [ ] **Cache de sessions** no Redis para leituras frequentes
-- [ ] **Integração com gateway de pagamento** real
+### Prioritárias
+- [ ] **Autenticação JWT** com refresh tokens e proteção dos endpoints
+- [ ] **Integração com gateway de pagamento** real (Stripe, PagSeguro, etc.)
+
+### Mensageria - Implementações Reais nos Consumers
+Atualmente, os handlers de eventos fazem operações básicas (logs e contadores no Redis). Em produção, poderiam:
+
+| Evento | Implementação Futura |
+|--------|---------------------|
+| `reservation.created` | Enviar email de confirmação, notificar via WebSocket, atualizar cache de disponibilidade |
+| `reservation.expired` | Enviar email de expiração, adicionar a lista de remarketing, analytics de abandono |
+| `payment.confirmed` | Gerar PDF do ingresso, enviar por email, integrar com programa de fidelidade |
+| `seat.released` | Notificar fila de espera, broadcast WebSocket para atualizar mapa de assentos |
+
+### Infraestrutura
+- [ ] **Métricas** com Prometheus/Grafana (latência, throughput, taxa de erros)
+- [ ] **WebSockets** para atualização em tempo real dos assentos no frontend
+- [ ] **Cache de sessions** no Redis para leituras frequentes (com invalidação via eventos)
 
 ---
 
@@ -484,7 +502,7 @@ src/
 ├── infrastructure/
 │   ├── database/migrations/    # Migrations TypeORM
 │   ├── logger/                 # Winston config
-│   └── redis/                  # Lock service
+│   └── redis/                  # Lock service + Stats service
 └── modules/
     ├── users/                  # CRUD de usuários
     ├── sessions/               # Sessões + Assentos
@@ -508,7 +526,7 @@ tests/
         ├── sessions/                # Controller + Service (19 testes)
         ├── reservations/            # Controller + Service + Job (33 testes)
         ├── payments/                # Controller + Service (22 testes)
-        └── messaging/               # Publisher + Consumer (39 testes)
+        └── messaging/               # Publisher + Consumer (40 testes)
 ```
 
 ---
