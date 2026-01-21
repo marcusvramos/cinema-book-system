@@ -1,5 +1,11 @@
 # Changelog
 
+## <small>1.1.1 (2026-01-21)</small>
+
+* fix: add pessimistic lock to cancel method to prevent race condition ([8698546](https://github.com/marcusvramos/cinema-book-system/commit/8698546))
+* refactor: remove unused code and fix n+1 query ([7b2cb8c](https://github.com/marcusvramos/cinema-book-system/commit/7b2cb8c))
+* docs: update redis lock ttl from 5s to 10s ([1756453](https://github.com/marcusvramos/cinema-book-system/commit/1756453))
+
 ## 1.1.0 (2026-01-21)
 
 * docs: update readme with counters and future improvements ([781421c](https://github.com/marcusvramos/cinema-book-system/commit/781421c))
