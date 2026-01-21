@@ -28,7 +28,10 @@
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f app",
     "prepare": "husky",
-    "release": "release-it"
+    "release": "release-it",
+    "release:patch": "release-it --ci --increment patch",
+    "release:minor": "release-it --ci --increment minor",
+    "release:major": "release-it --ci --increment major"
   },
   "lint-staged": {
     "*.ts": [
@@ -64,7 +67,7 @@
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
-    "@release-it/conventional-changelog": "^10.0.4",
+    "@release-it/conventional-changelog": "^10.0.1",
     "@types/amqplib": "^0.10.8",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
