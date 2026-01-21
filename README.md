@@ -47,6 +47,30 @@ Este sistema foi desenvolvido para resolver o problema de venda de ingressos de 
   - **Linux**: `sudo apt install make` (Ubuntu/Debian)
   - **Windows**: Use os comandos docker-compose diretamente
 
+### Variáveis de Ambiente
+
+Copie o arquivo de exemplo e ajuste conforme necessário:
+
+```bash
+cp .env.example .env
+```
+
+| Variável                  | Descrição                      | Padrão                              |
+| ------------------------- | ------------------------------ | ----------------------------------- |
+| `NODE_ENV`                | Ambiente (development/prod)    | `development`                       |
+| `PORT`                    | Porta da aplicação             | `3000`                              |
+| `DATABASE_HOST`           | Host do PostgreSQL             | `localhost`                         |
+| `DATABASE_PORT`           | Porta do PostgreSQL            | `5432`                              |
+| `DATABASE_USER`           | Usuário do PostgreSQL          | `postgres`                          |
+| `DATABASE_PASSWORD`       | Senha do PostgreSQL            | `postgres`                          |
+| `DATABASE_NAME`           | Nome do banco                  | `cinema`                            |
+| `REDIS_HOST`              | Host do Redis                  | `localhost`                         |
+| `REDIS_PORT`              | Porta do Redis                 | `6379`                              |
+| `RABBITMQ_URL`            | URL de conexão do RabbitMQ     | `amqp://guest:guest@localhost:5672` |
+| `RESERVATION_TTL_SECONDS` | Tempo de expiração da reserva  | `30`                                |
+
+> **Nota**: Ao usar Docker Compose, as variáveis já estão configuradas no `docker-compose.yml`.
+
 ### Subir o Ambiente
 
 ```bash
@@ -77,6 +101,10 @@ A aplicação estará disponível em:
 | **Swagger**  | http://localhost:3000/api-docs       |
 | **RabbitMQ** | http://localhost:15672 (guest/guest) |
 
+### Collection do Postman
+
+Uma collection completa do Postman está disponível em `postman/cinema-booking-system.postman_collection.json` com todos os endpoints documentados e exemplos de requisição.
+
 ### Verificar se está funcionando
 
 ```bash
@@ -91,8 +119,14 @@ Não é necessário! Os scripts de teste criam seus próprios dados automaticame
 ### Como executar testes
 
 ```bash
-# Testes unitários (57 testes)
+# Testes unitários (179 testes, 17 suites)
 pnpm test
+
+# Testes com cobertura (~86% coverage)
+pnpm test:cov
+
+# Testes em modo watch
+pnpm test:watch
 
 # Dar permissão aos scripts de integração
 chmod +x scripts/*.sh
@@ -116,17 +150,43 @@ chmod +x scripts/*.sh
 make help  # Lista todos os comandos
 ```
 
-| Comando           | Descrição                              |
-| ----------------- | -------------------------------------- |
-| `make up`         | Sobe containers em background          |
-| `make down`       | Para todos os containers               |
-| `make down-v`     | Para containers e remove volumes       |
-| `make logs`       | Mostra logs de todos os serviços       |
-| `make logs-app`   | Mostra logs apenas da aplicação        |
-| `make ps`         | Lista status dos containers            |
-| `make test`       | Roda testes unitários                  |
-| `make lint`       | Roda o linter                          |
-| `make clean`      | Remove containers, volumes e node_modules |
+| Comando            | Descrição                                  |
+| ------------------ | ------------------------------------------ |
+| `make up`          | Sobe containers em background              |
+| `make down`        | Para todos os containers                   |
+| `make down-v`      | Para containers e remove volumes           |
+| `make restart`     | Reinicia todos os containers               |
+| `make ps`          | Lista status dos containers                |
+| `make logs`        | Mostra logs de todos os serviços           |
+| `make logs-app`    | Mostra logs apenas da aplicação            |
+| `make logs-db`     | Mostra logs apenas do PostgreSQL           |
+| `make logs-redis`  | Mostra logs apenas do Redis                |
+| `make logs-rabbit` | Mostra logs apenas do RabbitMQ             |
+| `make build`       | Compila o projeto                          |
+| `make test`        | Roda testes unitários                      |
+| `make test-watch`  | Roda testes em modo watch                  |
+| `make lint`        | Roda o linter                              |
+| `make install`     | Instala dependências                       |
+| `make dev`         | Roda em modo desenvolvimento               |
+| `make clean`       | Remove containers, volumes e node_modules  |
+
+### Scripts pnpm disponíveis
+
+| Script                  | Descrição                                   |
+| ----------------------- | ------------------------------------------- |
+| `pnpm start`            | Inicia a aplicação                          |
+| `pnpm start:dev`        | Inicia em modo desenvolvimento (watch)      |
+| `pnpm start:debug`      | Inicia em modo debug                        |
+| `pnpm start:prod`       | Inicia em modo produção                     |
+| `pnpm build`            | Compila o projeto                           |
+| `pnpm test`             | Roda testes unitários                       |
+| `pnpm test:watch`       | Roda testes em modo watch                   |
+| `pnpm test:cov`         | Roda testes com cobertura                   |
+| `pnpm lint`             | Roda ESLint com auto-fix                    |
+| `pnpm format`           | Formata código com Prettier                 |
+| `pnpm migration:run`    | Executa migrations pendentes                |
+| `pnpm migration:revert` | Reverte última migration                    |
+| `pnpm migration:show`   | Lista status das migrations                 |
 
 ---
 
@@ -427,15 +487,22 @@ src/
     └── messaging/              # Publishers + Consumers
 
 tests/
-├── jest-setup.ts               # Setup global dos testes
+├── jest-setup.ts                    # Setup global dos testes
 └── unit/
+    ├── common/
+    │   ├── filters/                 # HttpExceptionFilter (8 testes)
+    │   ├── guards/                  # RateLimitGuard (14 testes)
+    │   ├── interceptors/            # LoggingInterceptor (9 testes)
+    │   └── utils/                   # RetryUtil (11 testes)
+    ├── health/                      # HealthController (3 testes)
     ├── infrastructure/
-    │   └── redis/              # RedisLockService (9 testes)
+    │   └── redis/                   # RedisLockService (9 testes)
     └── modules/
-        ├── users/              # UsersService (6 testes)
-        ├── sessions/           # SessionsService (10 testes)
-        ├── reservations/       # ReservationsService (17 testes)
-        └── payments/           # PaymentsService (15 testes)
+        ├── users/                   # Controller + Service (12 testes)
+        ├── sessions/                # Controller + Service (19 testes)
+        ├── reservations/            # Controller + Service + Job (33 testes)
+        ├── payments/                # Controller + Service (22 testes)
+        └── messaging/               # Publisher + Consumer (39 testes)
 ```
 
 ---
