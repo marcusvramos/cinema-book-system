@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0 (2026-01-21)
+
+* docs: update readme with counters and future improvements ([781421c](https://github.com/marcusvramos/cinema-book-system/commit/781421c))
+* refactor: handlers with dependency injection and production comments ([90eba51](https://github.com/marcusvramos/cinema-book-system/commit/90eba51))
+* refactor: move health module para /modules ([25a08f9](https://github.com/marcusvramos/cinema-book-system/commit/25a08f9))
+* feat: add redis stats service para contadores de vendas ([45bed4c](https://github.com/marcusvramos/cinema-book-system/commit/45bed4c))
+
 ## <small>1.0.1 (2026-01-21)</small>
 
 * chore: add release scripts for versioning increments ([d79b302](https://github.com/marcusvramos/cinema-book-system/commit/d79b302))
